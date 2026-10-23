@@ -1,7 +1,7 @@
 // The site, as a program. In a browser (Emscripten): the page mounted over
 // the copy written when the site was built, its clock moved at every frame;
 // and, chosen on it, the same tree drawn by skiff's scene on a canvas
-// (site.canvas) -- one model under both, the switch an edit of it.
+// -- skiff.ui mounted on the scene -- one model under both, the switch an edit of it.
 // Natively, when the site is built: the page mounted on the document kept in
 // memory and written out -- static.html whole, with no script; and, given
 // the page Emscripten made, the same markup put into it, for the browser to
@@ -11,25 +11,18 @@
 #endif
 import std;
 import skiff.ui;
-import site.model;
 import site.page;
-#ifdef __EMSCRIPTEN__
-import skia;
-import skiff.scene;
-import skiff.bind;
-import skiff.paint;
-import site.canvas;
-#endif
 
 namespace {
 site::Model gModel;
-using Tree = decltype(site::html::page());
-std::optional<skiff::ui::Page<Tree, site::Model>> gPage;
+// The page: the tree mounted on skiff.web's nodes.
+using PageTree = skiff::ui::Mounted<skiff::ui::OnPage, decltype(site::page())>;
+std::optional<skiff::web::Page<PageTree, site::Model>> gPage;
 
 void mountPage() {
   skiff::ui::mountTheme(skiff::web::dom::root());
-  skiff::web::mountStylesheet(skiff::web::dom::root(), site::html::kSiteCss);
-  gPage.emplace(site::html::page(), gModel);
+  skiff::web::mountStylesheet(skiff::web::dom::root(), site::kSiteCss);
+  gPage.emplace(skiff::ui::mount(skiff::ui::onPage, site::page()), gModel);
   gPage->mount();
 }
 } // namespace
@@ -95,11 +88,14 @@ EM_JS(void, siteOpen, (const char *href), { window.location.href = UTF8ToString(
 namespace site {
 // What nothing in the tree takes, the program does: a link followed.
 struct CanvasSink {
-  void take(const canvas::OpenLink &link) const {
+  void take(const skiff::ui::OpenLink &link) const {
     siteOpen(link.href.c_str());
   }
 };
-using CanvasTree = decltype(canvas::scenePage());
+// The canvas: the same tree mounted on the scene's nodes.
+using CanvasTree = skiff::ui::Mounted<skiff::ui::OnScene, decltype(page())>;
+static_assert(std::same_as<skiff::bind::RootOf<CanvasTree>, Model::RootType>,
+              "the canvas says the parts the page does: one model under both");
 } // namespace site
 
 namespace {
@@ -152,7 +148,7 @@ void makeCanvas() {
   gCanvas.font = skia::SkFont(regular);
   skiff::paint::defaultFont() = &gCanvas.font;
   skiff::scene::hostWork().pressed.clear();
-  gCanvas.scene.emplace(std::in_place, site::canvas::scenePage());
+  gCanvas.scene.emplace(std::in_place, skiff::ui::mount(skiff::ui::onScene, site::page()));
   gCanvas.binding.refresh(gCanvas.scene->root(), gModel);
 }
 
@@ -208,7 +204,7 @@ void canvasFrame(double nowMs) {
   skia::SkCanvas &c = *h.canvas;
   skiff::scene::detail::PlainPaint paint;
   skia::SkPaint paper;
-  paper.setColor(site::canvas::colour::kPaper);
+  paper.setColor(site::colour::kPaper);
   c.save();
   c.translate(0.0f, -static_cast<float>(offset));
   const skia::SkRect seen = skia::SkRect::MakeXYWH(0.0f, static_cast<float>(offset), static_cast<float>(width), static_cast<float>(height));
@@ -253,7 +249,7 @@ void tick() {
   const double now = emscripten_get_now();
   const double seconds = (now - gStart) / 1000.0;
   (void)gModel.apply(skiff::model::over<site::Clock>(skiff::model::setTo(site::Clock{seconds})));
-  const bool canvas = gModel.root().shown.fValue.backend == site::Backend::kScene;
+  const bool canvas = gModel.look<site::Shown>()->backend == site::Backend::kScene;
   if (canvas != gCanvas.shown) show(canvas);
   if (gCanvas.shown) canvasFrame(now);
   else gPage->refresh();
@@ -273,7 +269,7 @@ int main() {
   // elements, now the live page's. Where there is none, made.
   const skiff::web::dom::Handle root = skiff::web::dom::root();
   if (skiff::web::dom::children(root) >= 3) {
-    gPage.emplace(site::html::page(), gModel);
+    gPage.emplace(skiff::ui::mount(skiff::ui::onPage, site::page()), gModel);
     gPage->hydrate(root, 2);
   } else {
     mountPage();
