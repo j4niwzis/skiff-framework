@@ -111,6 +111,11 @@ jobs:
             -DCMAKE_CXX_FLAGS="-fexceptions -mmutable-globals" \
             -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
           cmake --build build/wasm --target site -- -k 0
+          # One std module: every unit compiled with the same flags. Two, and
+          # a unit importing modules made over both is one clang crashes on.
+          std=$(grep -oE 'cmake_cxx_std[^/ ]*\.dir' build/wasm/build.ninja | sort -u)
+          echo "$std"
+          test "$(echo "$std" | wc -l)" = 1
 
       - name: the program that writes it out, natively
         run: |
@@ -122,6 +127,9 @@ jobs:
             -DCMAKE_CXX_STDLIB_MODULES_JSON=/tmp/libstdc++.modules.json \
             -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
           cmake --build build/native --target site -- -k 0
+          std=$(grep -oE 'cmake_cxx_std[^/ ]*\.dir' build/native/build.ninja | sort -u)
+          echo "$std"
+          test "$(echo "$std" | wc -l)" = 1
 
       - name: the site, put together
         run: |
