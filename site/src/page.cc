@@ -546,6 +546,8 @@ inline void dress() {
   t.fTabText = colour::kInk;
   t.fTabTextDim = colour::kMuted;
   t.fTabUnderline = colour::kCoral;
+  t.fTabFontSize = 17.0f;
+  t.fTabPadding = 6.0f;
 }
 
 // The model: the parts the page's views say they keep.
@@ -560,7 +562,6 @@ html,body{margin:0;background:#f4efe6}
 .c-kw{color:#ff9d76}.c-name{color:#8fd3e0}.c-str{color:#e7c79b}.c-num{color:#f2b5d4}.c-com{color:#7d8f9b;font-style:italic}
 .site-link{text-decoration:none}
 .site-link:hover{text-decoration:underline}
-#skiff .skiff-tab{font-size:17px;padding:6px 0}
 @media (max-width:640px){[data-view=Header]{flex-wrap:wrap;row-gap:6px}}
 #skiff .skiff-tab[aria-selected=true]{font-weight:700}
 )";
