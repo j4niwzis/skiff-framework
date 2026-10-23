@@ -259,6 +259,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void skiff_web_event(std::uint32_t handle, const
   if (gPage) gPage->event(handle, std::string_view(event), std::string_view(value));
 }
 int main() {
+  site::dress();
   site::seed(gModel);
   (void)gModel.apply(skiff::model::over<site::Shown>([](site::Shown s) {
     s.live = true;
@@ -313,6 +314,7 @@ constexpr std::string_view kTail = "</div>\n</body>\n</html>\n";
 // the page Emscripten made, in place of @@SKIFF-PRERENDER@@ -- text, which
 // Emscripten keeps as it minifies the page; a comment it takes out.
 int main(int argc, char **argv) {
+  site::dress();
   site::seed(gModel);
   mountPage();
   // The page's events, compiled here as in the browser (never taken here):

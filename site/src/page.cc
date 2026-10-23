@@ -484,7 +484,8 @@ struct ShownIs {
 auto backends() {
   const auto when = [](Backend b) { return ShownIs{b}; };
   return SKIFF_NAMED(Backends, state<Shown>(section("backends", colour::kPaper, title("One tree, two backends", 44.0f, colour::kCoral),
-                 words("skiff.ui is the same names on either backend: the program says which it is built for. Try changing it:"),
+                 words("skiff.ui is one tree for both backends: this program mounts it on the page and on the scene, one model under both. "
+                       "Try changing it:"),
                  bound<model::Field<&Shown::backend>>(ChoiceTabs<Backend>(
                      {{"Page", Backend::kPage}, {"Canvas", Backend::kScene}})),
                  spec_for<Shown>(when(Backend::kPage),
@@ -507,7 +508,9 @@ auto backends() {
 auto footer() {
   return SKIFF_NAMED(Footer, section("footer", colour::kInk,
                  sides(side(Text("skiff", 22.0f, colour::kSand, true),
-                            words("This page is site/ in skiff-framework: skiff.ui on skiff.web, built with Emscripten, served by GitHub Pages.", 15.0f,
+                            words("This page is site/ in skiff-framework: one tree in skiff.ui, mounted on skiff.web and on skiff's scene, built with "
+                                  "Emscripten, served by GitHub Pages.",
+                                  15.0f,
                                   colour::kPaper)),
                        side(Text("Written in the same hand", 15.0f, colour::kSand, true),
                             row(hbox(18.0f, {.autoSize = scene::axes::kBoth}), Link("skiff", "https://github.com/j4niwzis/skiff", 16.0f, colour::kPaper),
@@ -524,6 +527,14 @@ auto page() {
 }
 
 
+// The theme both backends dress their controls in, said once: the site's
+// tabs sit on its paper, in its ink. Before anything is made.
+inline void dress() {
+  Theme &t = theme();
+  t.fTabText = colour::kInk;
+  t.fTabTextDim = colour::kMuted;
+}
+
 // The model: the parts the page's views say they keep.
 using Model = skiff::ui::ModelOf<decltype(page())>;
 
@@ -536,10 +547,9 @@ html,body{margin:0;background:#f4efe6}
 .c-kw{color:#ff9d76}.c-name{color:#8fd3e0}.c-str{color:#e7c79b}.c-num{color:#f2b5d4}.c-com{color:#7d8f9b;font-style:italic}
 .site-link{text-decoration:none}
 .site-link:hover{text-decoration:underline}
-#skiff .skiff-tab{color:#5a6b77;font-size:17px;padding:6px 0}
+#skiff .skiff-tab{font-size:17px;padding:6px 0}
 @media (max-width:640px){[data-view=Header]{flex-wrap:wrap;row-gap:6px}}
-#skiff .skiff-tab:hover{color:#1d2b36}
-#skiff .skiff-tab[aria-selected=true]{color:#1d2b36;font-weight:700;box-shadow:inset 0 -2px #d9603b}
+#skiff .skiff-tab[aria-selected=true]{font-weight:700;box-shadow:inset 0 -2px #d9603b}
 )";
 
 } // namespace site
