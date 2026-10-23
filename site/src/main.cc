@@ -63,12 +63,16 @@ EM_JS(void, siteCanvasMake, (), {
       if (taken) e.preventDefault();
     });
 });
-EM_JS(void, siteCanvasShow, (int on), {
-  const host = document.getElementById('skiff-canvas-host');
+EM_JS(void, siteShowPage, (int on), {
   const page = document.getElementById('skiff');
-  if (page) page.style.display = on ? 'none' : '';
+  if (page) page.style.display = on ? '' : 'none';
+});
+EM_JS(void, siteShowCanvas, (int on), {
+  const host = document.getElementById('skiff-canvas-host');
   if (host) host.style.display = on ? 'block' : 'none';
 });
+EM_JS(double, siteScrollY, (), { return window.scrollY; });
+EM_JS(void, siteScrollTo, (double y), { window.scrollTo(window.scrollX, y); });
 EM_JS(int, siteCanvasWidth, (), {
   const host = document.getElementById('skiff-canvas-host');
   return host ? host.clientWidth : 0;
@@ -153,11 +157,27 @@ void makeCanvas() {
 }
 
 // The page or the canvas shown, as the model says.
+void canvasFrame(double nowMs);
+// The page or the canvas shown, as the model says, the window scrolled
+// where it was: the one coming is put in place first -- the canvas laid out
+// and its box as tall as the scene -- and only then the other goes, so the
+// document is never for a moment shorter than the scroll and the browser
+// never takes it back to the top.
 void show(bool canvas) {
   if (canvas && !gCanvas.scene) makeCanvas();
-  gCanvas.shown = canvas;
+  const double at = siteScrollY();
   gCanvas.offset = -1.0;
-  siteCanvasShow(canvas ? 1 : 0);
+  if (canvas) {
+    siteShowCanvas(1);
+    gCanvas.shown = true;
+    canvasFrame(emscripten_get_now());
+    siteShowPage(0);
+  } else {
+    siteShowPage(1);
+    gCanvas.shown = false;
+    siteShowCanvas(0);
+  }
+  siteScrollTo(at);
 }
 
 // What was pressed and kept by its path -- where nothing was carried -- and
