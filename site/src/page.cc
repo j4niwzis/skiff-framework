@@ -9,7 +9,7 @@ module;
 export module site.page;
 
 import std;
-import skiff.ui;
+import skiff.app;
 
 namespace site {
 using namespace skiff;
@@ -564,5 +564,32 @@ html,body{margin:0;background:#f4efe6}
 @media (max-width:640px){[data-view=Header]{flex-wrap:wrap;row-gap:6px}}
 #skiff .skiff-tab[aria-selected=true]{font-weight:700}
 )";
+
+
+// What the site adds to skiff.app's program (main.cc): its theme, its list
+// to begin with, the clock its boxes move by, which backend is shown and
+// whether the canvas outlines its repaints, its stylesheet, the paper the
+// canvas is cleared to, and what is written into the head of the page.
+struct Hooks {
+  void dress() { site::dress(); }
+  void start(Model &m) {
+    seed(m);
+    if (skiff::app::kInBrowser)
+      (void)m.apply(model::over<Shown>([](Shown s) {
+        s.live = true;
+        return s;
+      }));
+  }
+  void frame(Model &m, double seconds) { (void)m.apply(model::over<Clock>(model::setTo(Clock{seconds}))); }
+  [[nodiscard]] bool onCanvas(const Model &m) const { return m.look<Shown>()->backend == Backend::kScene; }
+  [[nodiscard]] bool outlineRepaints(const Model &m) const { return m.look<Repaints>()->shown; }
+  [[nodiscard]] std::string_view stylesheet() const { return kSiteCss; }
+  [[nodiscard]] scene::Colour paper() const { return colour::kPaper; }
+  [[nodiscard]] std::string_view head() const {
+    return "<title>skiff -- a C++ UI library</title>\n"
+           "<meta name=\"description\" content=\"skiff: a C++ UI library -- a typed tree, a model it is bound to, and two "
+           "backends: a scene drawn by Skia, and the page.\">\n";
+  }
+};
 
 } // namespace site

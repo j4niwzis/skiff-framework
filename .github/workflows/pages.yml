@@ -1,4 +1,5 @@
-# The site, built and served: skiff's page written with skiff (site/).
+# The site, built and served: skiff's page written with skiff (site/), a
+# program of skiff-framework's skiff.app.
 #
 # Twice from one source: natively, the program that writes the page out --
 # static.html, with no script, and the markup put into the page Emscripten
@@ -106,7 +107,7 @@ jobs:
       - name: the page, under Emscripten
         run: |
           source /tmp/emsdk/emsdk_env.sh
-          emcmake cmake -S site -B build/wasm -G Ninja \
+          emcmake cmake -S . -B build/wasm -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_FLAGS="-fexceptions -mmutable-globals" \
             -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
@@ -119,7 +120,7 @@ jobs:
 
       - name: the program that writes it out, natively
         run: |
-          cmake -S site -B build/native -G Ninja \
+          cmake -S . -B build/native -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=clang-23 \
             -DCMAKE_CXX_COMPILER=clang++-23 \
@@ -134,8 +135,8 @@ jobs:
       - name: the site, put together
         run: |
           mkdir -p public
-          cp build/wasm/index.html build/wasm/index.js build/wasm/index.wasm public/
-          build/native/site public/static.html public/index.html
+          cp build/wasm/site/index.html build/wasm/site/index.js build/wasm/site/index.wasm public/
+          build/native/site/site public/static.html public/index.html
           # The script and the WebAssembly named by this revision: a browser
           # that kept the last index.js would load it with the new index.wasm,
           # and their imports would not match.
