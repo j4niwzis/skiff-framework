@@ -1,0 +1,113 @@
+# The site, built and served: skiff's page written with skiff (site/).
+#
+# Twice from one source: natively, the program that writes the page out --
+# static.html, with no script, and the markup put into the page Emscripten
+# made, which a browser shows before the WebAssembly has loaded; and under
+# Emscripten, the page itself. Then GitHub Pages serves the files.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # Clang 23 and the distribution's libstdc++, for the native program.
+      - name: clang 23
+        run: |
+          sudo apt-get update || true
+          sudo apt-get install -y ninja-build python3 pkg-config \
+            lsb-release software-properties-common gnupg curl
+          curl -fsSL https://apt.llvm.org/llvm.sh -o /tmp/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 23 all
+          echo /usr/lib/llvm-23/bin >> "$GITHUB_PATH"
+
+      - name: cmake
+        run: |
+          version=4.3.4
+          curl -sSL -o cmake.tar.gz \
+            "https://github.com/Kitware/CMake/releases/download/v${version}/cmake-${version}-linux-x86_64.tar.gz"
+          sudo tar xzf cmake.tar.gz -C /opt
+          echo "/opt/cmake-${version}-linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: what import std reads from libstdc++
+        run: |
+          std=$(ls /usr/include/c++/*/bits/std.cc | sort -V | tail -1)
+          cat > /tmp/libstdc++.modules.json <<EOF
+          {
+            "version": 1,
+            "revision": 1,
+            "modules": [
+              { "logical-name": "std", "source-path": "$std",
+                "is-std-library": true },
+              { "logical-name": "std.compat",
+                "source-path": "${std%std.cc}std.compat.cc",
+                "is-std-library": true }
+            ]
+          }
+          EOF
+
+      - name: Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git /tmp/emsdk
+          /tmp/emsdk/emsdk install 6.0.13
+          /tmp/emsdk/emsdk activate 6.0.13
+
+      - name: the page, under Emscripten
+        run: |
+          source /tmp/emsdk/emsdk_env.sh
+          emcmake cmake -S site -B build/wasm -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
+          cmake --build build/wasm --target site -- -k 0
+
+      - name: the program that writes it out, natively
+        run: |
+          cmake -S site -B build/native -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-23 \
+            -DCMAKE_CXX_COMPILER=clang++-23 \
+            -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" \
+            -DCMAKE_CXX_STDLIB_MODULES_JSON=/tmp/libstdc++.modules.json \
+            -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
+          cmake --build build/native --target site -- -k 0
+
+      - name: the site, put together
+        run: |
+          mkdir -p public
+          cp build/wasm/index.html build/wasm/index.js build/wasm/index.wasm public/
+          cp site/web/*.png public/
+          build/native/site public/static.html public/index.html
+          ls -la public
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,327 @@
+// The site of skiff, written with skiff: one tree against skiff.ui. In a
+// browser it is the page itself, its nodes the document's elements, bound
+// to the model -- C++ compiled to WebAssembly; when the site is built, the
+// same tree is mounted natively on a document kept in memory and written
+// out as HTML, which is what a browser shows first.
+module;
+#include <skiff/named.h>
+export module site.page;
+
+import std;
+import skiff.ui;
+import site.model;
+
+namespace site {
+using namespace skiff;
+using namespace skiff::ui;
+namespace dom = skiff::web::dom;
+
+namespace colour {
+inline constexpr scene::Colour kPaper = 0xfff4efe6u;  // sailcloth
+inline constexpr scene::Colour kInk = 0xff1d2b36u;    // the sea at night
+inline constexpr scene::Colour kSea = 0xff2a7f8fu;
+inline constexpr scene::Colour kCoral = 0xffd9603bu;
+inline constexpr scene::Colour kSand = 0xffe7c79bu;
+inline constexpr scene::Colour kMuted = 0xff5a6b77u;
+inline constexpr scene::Colour kFoam = 0xffffffffu;
+inline constexpr scene::Colour kCodeInk = 0xffe8eef2u;
+inline constexpr scene::Colour kPanel = 0xffebe3d7u;
+} // namespace colour
+
+// ---- the nodes the site has of its own ----
+
+// A link: a text that is an <a>.
+struct Link : Text {
+  Link(std::string label, std::string href, float size, scene::Colour c, bool bold = false)
+      : Text(std::move(label), size, c, bold), fHref(std::move(href)) {}
+  [[nodiscard]] static constexpr std::string_view tag() { return "a"; }
+  void mounted() {
+    Text::mounted();
+    dom::attr(fState.fHandle, "class", "skiff-text site-link");
+    dom::attr(fState.fHandle, "href", fHref);
+  }
+  std::string fHref;
+};
+// Code, as it is written: monospace, its lines kept.
+struct Code : Text {
+  explicit Code(std::string code) : Text(std::move(code), 13.5f, colour::kCodeInk) {
+    setMonospace(true);
+    setWrapped(true);
+  }
+  void mounted() {
+    Text::mounted();
+    dom::attr(fState.fHandle, "class", "skiff-text site-code");
+  }
+};
+// A picture from a file beside the page.
+struct Picture : skiff::web::Node {
+  Picture(std::string src, std::string alt, scene::Spec spec = {}) : fSrc(std::move(src)), fAlt(std::move(alt)) { fState.apply(spec); }
+  [[nodiscard]] static constexpr std::string_view tag() { return "img"; }
+  void mounted() {
+    dom::attr(fState.fHandle, "src", fSrc);
+    dom::attr(fState.fHandle, "alt", fAlt);
+    dom::attr(fState.fHandle, "loading", "lazy");
+    dom::attr(fState.fHandle, "class", "site-picture");
+  }
+  std::string fSrc, fAlt;
+};
+// Another page, framed: the copy of this one written when the site was built.
+struct Framed : skiff::web::Node {
+  explicit Framed(std::string src, scene::Spec spec = {}) : fSrc(std::move(src)) { fState.apply(spec); }
+  [[nodiscard]] static constexpr std::string_view tag() { return "iframe"; }
+  void mounted() {
+    dom::attr(fState.fHandle, "src", fSrc);
+    dom::attr(fState.fHandle, "loading", "lazy");
+    dom::attr(fState.fHandle, "title", "This page, as it was written when the site was built");
+    dom::attr(fState.fHandle, "class", "site-frame");
+  }
+  std::string fSrc;
+};
+// A text that reads its part of the model.
+template <class T, class F> struct Label : Text {
+  Label(F format, float size, scene::Colour c, bool bold = false) : Text(std::string(), size, c, bold), fFormat(std::move(format)) {
+    setWrapped(true);
+  }
+  void read(const T &now) { setText(fFormat(now)); }
+  F fFormat;
+};
+template <class T, class F> Label<T, F> label(F format, float size = 16.0f, scene::Colour c = colour::kInk, bool bold = false) {
+  return Label<T, F>(std::move(format), size, c, bold);
+}
+// The button of a row of the list: it takes its row away.
+struct RemoveButton : SendButton<RemoveTodo> {
+  RemoveButton() : SendButton<RemoveTodo>("×", RemoveTodo{}) {}
+  void read(const Todo &t) { SendButton<RemoveTodo>::read(RemoveTodo{t.id}); }
+};
+// The button that adds what is typed.
+struct AddButton : SendButton<AddTodo> {
+  AddButton() : SendButton<AddTodo>("Add", AddTodo{}) {}
+  void read(const Draft &d) { SendButton<AddTodo>::read(AddTodo{d.text}); }
+};
+
+// ---- the pieces of the page ----
+
+[[nodiscard]] Text title(std::string s, float size = 40.0f, scene::Colour c = colour::kInk) { return Text(std::move(s), size, c, true); }
+[[nodiscard]] Text words(std::string s, float size = 18.0f, scene::Colour c = colour::kInk) {
+  Text t(std::move(s), size, c);
+  t.setWrapped(true);
+  return t;
+}
+// A section: as wide as the page lets it, at most 1100 across, in the middle.
+template <class... Parts> auto section(std::string_view /*id*/, scene::Colour background, Parts... parts) {
+  return column(vbox(0.0f, {.fillX = true, .autoSize = scene::axes::kY, .padding = {48.0f, 24.0f, 48.0f, 24.0f}, .background = background}),
+                column(vbox(28.0f, {.fillX = true, .autoSize = scene::axes::kY, .maxWidth = 1100.0f, .alignSelf = scene::align::kMiddle}),
+                       std::move(parts)...));
+}
+// Two sides that sit beside each other where there is room, one over the
+// other where there is not.
+template <class... Parts> auto sides(Parts... parts) {
+  auto flow = Flow(scene::FlowOptions{.direction = scene::direction::horizontal{}, .spacingX = 40.0f, .spacingY = 28.0f, .wrap = true},
+                   std::move(parts)...);
+  flow.apply({.fillX = true, .autoSize = scene::axes::kY});
+  return flow;
+}
+template <class... Parts> auto side(Parts... parts) {
+  return column(vbox(14.0f, {.autoSize = scene::axes::kY, .grow = scene::axes::kX, .minWidth = 300.0f}), std::move(parts)...);
+}
+template <class... Parts> auto card(scene::Colour background, Parts... parts) {
+  return column(vbox(12.0f, {.fillX = true, .autoSize = scene::axes::kY, .padding = scene::Margin::all(20.0f), .cornerRadius = 12.0f,
+                             .background = background}),
+                std::move(parts)...);
+}
+auto pill(std::string text, scene::Colour plate, scene::Colour ink = colour::kFoam) {
+  return row(hbox(0.0f, {.autoSize = scene::axes::kBoth, .padding = {8.0f, 14.0f, 8.0f, 14.0f}, .cornerRadius = 18.0f, .background = plate}),
+             Text(std::move(text), 17.0f, ink, true));
+}
+
+auto header() {
+  return row(hbox(24.0f, {.fillX = true, .autoSize = scene::axes::kY, .padding = {14.0f, 24.0f, 14.0f, 24.0f}, .background = colour::kInk}),
+             Text("skiff", 26.0f, colour::kSand, true), Box<>(scene::Spec{.grow = scene::axes::kX}),
+             Link("Docs", "https://github.com/j4niwzis/skiff#readme", 17.0f, colour::kPaper),
+             Link("Widgets", "https://github.com/j4niwzis/skiff-widgets", 17.0f, colour::kPaper),
+             Link("Framework", "https://github.com/j4niwzis/skiff-framework", 17.0f, colour::kPaper),
+             Link("GitHub", "https://github.com/j4niwzis/skiff", 17.0f, colour::kSand, true));
+}
+
+[[nodiscard]] inline std::string whoIsLayingOut(const Shown &s) {
+  return s.live ? "skiff is laying out this page right now — every element you see is a node of a C++ tree, compiled to WebAssembly and "
+                  "bound to a model."
+                : "skiff wrote this page when the site was built — the same C++ tree, mounted on a document kept in memory and saved as "
+                  "HTML. The live one takes over as soon as its WebAssembly has loaded.";
+}
+
+auto hero() {
+  return section("top", colour::kPaper,
+                 sides(side(title("A C++ UI library: a typed tree, a model it is bound to, and two backends.", 52.0f),
+                            bound<Shown>(label<Shown>(whoIsLayingOut, 26.0f, colour::kCoral, true))),
+                       column(vbox(12.0f, {.autoSize = scene::axes::kBoth, .alignSelf = scene::align::kMiddle}), pill("C++23 modules", colour::kSea),
+                              pill("One tree, two backends", colour::kCoral), pill("A model you edit, a view that follows", colour::kInk),
+                              pill("No virtual calls in a release build", colour::kSea), pill("Tests without a browser", colour::kCoral))));
+}
+
+auto features() {
+  return section("features", colour::kInk,
+                 sides(side(Code("import skiff.ui;"), words("Modules all the way down: no headers to keep in step, one macro (SKIFF_NAMED).", 18.0f,
+                                                                 colour::kPaper),
+                            words("The tree is its type: what a node holds, how it is laid out and what it reads are known when it compiles.", 18.0f,
+                                  colour::kPaper)),
+                       side(Text("Backend agnostic.", 24.0f, colour::kSand, true),
+                            words("Natively, a scene drawn by Skia: every frame laid out, damaged and repainted where it changed.", 18.0f, colour::kPaper),
+                            words("Here, the browser's own elements: a Box a div, a Text a span, a button a button -- laid out by the browser, written "
+                                  "by skiff only where the model moved.",
+                                  18.0f, colour::kPaper))));
+}
+
+inline constexpr std::string_view kCounterSource = R"(auto counter() {
+  return column(vbox(12.0f),
+      bound<Counter>(label<Counter>([](const Counter &c) {
+        return std::format("Pressed {} times", c.count);
+      })),
+      row(hbox(8.0f),
+          SendButton<Decrement>("−", Decrement{}),
+          SendButton<Increment>("+", Increment{})));
+}
+// ...and what the buttons send, answered:
+handle<Increment>([] {
+  return model::over<Counter>([](Counter c) { ++c.count; return c; });
+})
+)";
+
+auto counter() {
+  return column(vbox(12.0f, {.fillX = true, .autoSize = scene::axes::kY}),
+                bound<Counter>(label<Counter>([](const Counter &c) { return std::format("Pressed {} times", c.count); }, 28.0f, colour::kInk, true)),
+                row(hbox(8.0f, {.autoSize = scene::axes::kBoth}), SendButton<Decrement>("−", Decrement{}),
+                    SendButton<Increment>("+", Increment{})));
+}
+
+auto declarative() {
+  return section("syntax", colour::kPaper, title("Declarative, and typed", 44.0f, colour::kCoral),
+                 sides(side(words("A screen is an expression: nested rows and columns of nodes, each said once, with what it reads from the model "
+                                  "and what it sends."),
+                            words("Mix it with C++ as it is: functions are components, loops make rows, an if is a part shown or not."),
+                            card(colour::kInk, Code(std::string(kCounterSource)))),
+                       side(card(colour::kPanel, Text("Live", 15.0f, colour::kMuted, true), counter(),
+                                 words("That is the code on the left, running: the same function, compiled into this page.", 15.0f, colour::kMuted)))));
+}
+
+auto todoRow(const Todo &) {
+  return bound<Todo>(row(hbox(10.0f, {.fillX = true, .autoSize = scene::axes::kY, .padding = {6.0f, 10.0f, 6.0f, 10.0f}, .cornerRadius = 8.0f,
+                                      .background = colour::kFoam}),
+                         bound<model::Field<&Todo::done>>(ToggleField()),
+                         styled({.grow = scene::axes::kX}, label<Todo>([](const Todo &t) { return t.text; }, 17.0f)), RemoveButton()));
+}
+
+auto binding() {
+  return section("model", colour::kPanel, title("A model you edit, a view that follows", 44.0f, colour::kSea),
+                 sides(side(words("The program's state is one model: tracked parts, lists of them by key. A control edits its part; the binding "
+                                  "walks only to the nodes that read what changed."),
+                            words("No observers to subscribe, no virtual DOM to diff: what reads a part is known from the tree's type."),
+                            card(colour::kInk, Code(R"(each<int, Todo>([](const Todo &) {
+  return bound<Todo>(row(hbox(10.0f),
+      bound<model::Field<&Todo::done>>(ToggleField()),
+      label<Todo>([](const Todo &t) { return t.text; }),
+      RemoveButton()));
+}))"))),
+                       side(card(colour::kPaper, Text("Live", 15.0f, colour::kMuted, true),
+                                 row(hbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}),
+                                     styled({.grow = scene::axes::kX}, bound<model::Field<&Draft::text>>(TextField<std::string>("Something to do"))),
+                                     bound<Draft>(AddButton())),
+                                 each<int, Todo>([](const Todo &t) { return todoRow(t); }, vbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}))))));
+}
+
+// A bar of the moving section: its width and colour as the clock says.
+auto bar(int i) {
+  return spec_for<Clock>(
+      [i](const Clock &c) {
+        const double phase = c.seconds * 1.6 + i * 0.45;
+        const float wave = static_cast<float>(0.5 + 0.5 * std::sin(phase));
+        const std::array<scene::Colour, 3> colours{colour::kSea, colour::kCoral, colour::kSand};
+        return scene::Spec{.width = 60.0f + 520.0f * wave, .background = colours[static_cast<std::size_t>(i) % colours.size()]};
+      },
+      Box<>(scene::Spec{.height = 14.0f, .cornerRadius = 7.0f}));
+}
+template <std::size_t... I> auto bars(std::index_sequence<I...>) {
+  return column(vbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}), bar(static_cast<int>(I))...);
+}
+
+auto motion() {
+  return section("motion", colour::kInk, title("Fast enough to move every frame", 44.0f, colour::kSand),
+                 sides(side(words("Each bar is a node, its width read from the model's clock. Every frame the clock moves, the binding walks to the "
+                                  "bars that read it, and the page writes only the widths that changed.",
+                                  18.0f, colour::kPaper),
+                            words("Natively the same holds for the scene: what moved is damaged and repainted, the rest kept as it was drawn.", 18.0f,
+                                  colour::kPaper)),
+                       side(bars(std::make_index_sequence<12>{}))));
+}
+
+auto backends() {
+  const auto when = [](Backend b) {
+    return [b](const Shown &s) { return scene::Spec{.visible = s.backend == b}; };
+  };
+  return section("backends", colour::kPaper, title("One tree, two backends", 44.0f, colour::kCoral),
+                 words("skiff.ui is the same names on either backend: the program says which it is built for. Try changing it:"),
+                 bound<model::Field<&Shown::backend>>(ChoiceTabs<Backend>(
+                     {{"This page", Backend::kPage}, {"Without JavaScript", Backend::kStatic}, {"On Skia", Backend::kScene}})),
+                 spec_for<Shown>(when(Backend::kPage),
+                                 card(colour::kPanel, words("You are looking at it: skiff.web makes each node an element of the document and binds it "
+                                                            "to the model. The page is C++ compiled to WebAssembly; there is no framework of "
+                                                            "JavaScript under it, only the few lines that pass the document's events in."))),
+                 spec_for<Shown>(when(Backend::kStatic),
+                                 card(colour::kPanel, words("The same tree, written out when the site was built: mounted natively on a document kept in "
+                                                            "memory and saved as HTML -- what a search engine and a slow phone see first. No script "
+                                                            "at all:"),
+                                      Framed("static.html", {.fillX = true, .height = 520.0f}))),
+                 spec_for<Shown>(when(Backend::kScene),
+                                 card(colour::kPanel, words("Natively the same source is a scene drawn by Skia. Here, the maze visualizer: one tree "
+                                                            "against skiff.ui, as a page in a browser and as a window on Skia."),
+                                      sides(side(Text("As a page", 15.0f, colour::kMuted, true), Picture("mazes-page.png", "The maze visualizer as a page")),
+                                            side(Text("On Skia", 15.0f, colour::kMuted, true), Picture("mazes-skia.png", "The maze visualizer on Skia"))))));
+}
+
+auto footer() {
+  return section("footer", colour::kInk,
+                 sides(side(Text("skiff", 22.0f, colour::kSand, true),
+                            words("This page is site/ in skiff-framework: skiff.ui on skiff.web, built with Emscripten, served by GitHub Pages.", 15.0f,
+                                  colour::kPaper)),
+                       side(Text("Written in the same hand", 15.0f, colour::kSand, true),
+                            row(hbox(18.0f, {.autoSize = scene::axes::kBoth}), Link("skiff", "https://github.com/j4niwzis/skiff", 16.0f, colour::kPaper),
+                                Link("skiff-widgets", "https://github.com/j4niwzis/skiff-widgets", 16.0f, colour::kPaper),
+                                Link("knot", "https://github.com/j4niwzis/knot", 16.0f, colour::kPaper),
+                                Link("chevron", "https://github.com/j4niwzis/chevron", 16.0f, colour::kPaper),
+                                Link("alef", "https://github.com/j4niwzis/alef", 16.0f, colour::kPaper)))));
+}
+
+} // namespace site
+
+export namespace site {
+
+// The stylesheet the site adds to skiff's: the page's font, code kept as it
+// is written, links, the framed copy and the pictures.
+inline constexpr std::string_view kSiteCss = R"(
+html,body{margin:0;background:#f4efe6}
+#skiff{font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1d2b36}
+.site-code{white-space:pre;display:block;overflow-x:auto;line-height:1.5}
+.site-link{text-decoration:none}
+.site-link:hover{text-decoration:underline}
+.site-frame{border:1px solid #c9bfb1;border-radius:10px;background:#f4efe6;width:100%}
+.site-picture{max-width:100%;border-radius:10px;display:block}
+)";
+
+auto page() {
+  return scoped<Root>(
+      handlers(handle<Increment>([] { return model::over<Counter>([](Counter c) { ++c.count; return c; }); }),
+               handle<Decrement>([] { return model::over<Counter>([](Counter c) { --c.count; return c; }); }),
+               handle<AddTodo>([](const AddTodo &add) {
+                 static int next = 100;
+                 using Answer = std::tuple<decltype(model::put<Todo>(0, Todo{})), decltype(model::over<Draft>(model::setTo(Draft{})))>;
+                 if (add.text.empty()) return std::optional<Answer>();
+                 const int id = next++;
+                 return std::optional<Answer>(Answer{model::put<Todo>(id, Todo{id, add.text, false}), model::over<Draft>(model::setTo(Draft{}))});
+               }),
+               handle<RemoveTodo>([](const RemoveTodo &remove) { return model::take<Todo>(remove.id); })),
+      column(vbox(0.0f, {.fillX = true, .autoSize = scene::axes::kY}), SKIFF_NAMED(Header, header()), SKIFF_NAMED(Hero, hero()),
+             SKIFF_NAMED(Features, features()), SKIFF_NAMED(Syntax, declarative()), SKIFF_NAMED(Binding, binding()),
+             SKIFF_NAMED(Motion, motion()), SKIFF_NAMED(Backends, backends()), SKIFF_NAMED(Footer, footer())));
+}
+
+} // namespace site
