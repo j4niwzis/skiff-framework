@@ -38,10 +38,11 @@ if(NOT TARGET skiff::ui)
   find_package(skiff-widgets 0.1.0 REQUIRED)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-  set(site_emscripten_flags -fexceptions)
-  string(JOIN " " site_emscripten_joined ${site_emscripten_flags})
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${site_emscripten_joined}")
+# Under Emscripten every unit -- the std module CMake makes among them -- is
+# compiled with exceptions, or the std module is not one they can load: said
+# where the build is configured (CMAKE_CXX_FLAGS), not after.
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten" AND NOT CMAKE_CXX_FLAGS MATCHES "-fexceptions")
+  message(FATAL_ERROR "skiff's site under Emscripten: configure with -DCMAKE_CXX_FLAGS=\"-fexceptions -mmutable-globals\"")
 endif()
 
 add_library(site_ui STATIC)
@@ -56,11 +57,8 @@ add_executable(site ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
 target_link_libraries(site PRIVATE site_ui)
 set_target_properties(site PROPERTIES CXX_STANDARD 23 CXX_SCAN_FOR_MODULES ON)
 if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-  foreach(target site_ui site)
-    target_compile_options(${target} PRIVATE ${site_emscripten_flags})
-  endforeach()
   set_target_properties(site PROPERTIES OUTPUT_NAME index SUFFIX .html)
-  target_link_options(site PRIVATE ${site_emscripten_flags}
+  target_link_options(site PRIVATE -fexceptions
     -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=ccall
     -sEXPORTED_FUNCTIONS=_main,_skiff_web_event
     -sSTACK_SIZE=4194304

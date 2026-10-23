@@ -32,7 +32,8 @@ auto counter() {
   runs: its examples are the code beside them.
 
 ```sh
-emcmake cmake -S site -B build/wasm -G Ninja -DCMAKE_BUILD_TYPE=Release
+emcmake cmake -S site -B build/wasm -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS="-fexceptions -mmutable-globals"
 cmake --build build/wasm --target site
 cmake -S site -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/native --target site

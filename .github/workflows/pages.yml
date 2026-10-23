@@ -75,6 +75,7 @@ jobs:
           source /tmp/emsdk/emsdk_env.sh
           emcmake cmake -S site -B build/wasm -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_FLAGS="-fexceptions -mmutable-globals" \
             -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
           cmake --build build/wasm --target site -- -k 0
 
