@@ -348,7 +348,7 @@ auto backends() {
                  spec_for<Shown>(when(Backend::kScene),
                                  card(colour::kPanel, words("Natively the same tree is a scene: laid out and drawn by skiff itself, each frame "
                                                             "damaged and repainted where it changed. Here the scene draws on a canvas -- "
-                                                            "coming next."))));
+                                                            "coming next.")))));
 }
 
 auto footer() {
