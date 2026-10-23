@@ -267,13 +267,8 @@ template <auto View, class Hooks = NoHooks> struct App {
     double scale = 0.0, offset = -1.0;
     float tall = 0.0f;
     bool shown = false;
-    // What was repainted, outlined, and until when: shown for a moment, so
-    // an eye can follow it, then painted over.
-    struct Outline {
-      skia::SkRect rect;
-      double until = 0.0;
-    };
-    std::vector<Outline> outlined;
+    // Where the last frame outlined what it repainted: painted over next.
+    std::vector<skia::SkRect> outlined;
   };
   static Canvas &canvas() {
     static Canvas kept;
@@ -340,21 +335,15 @@ template <auto View, class Hooks = NoHooks> struct App {
     std::vector<skia::SkRect> pieces;
     if (whole) {
       pieces.push_back(seen);
+      h.outlined.clear();
     } else if (!frame.fDamageRects.empty()) {
       pieces = frame.fDamageRects;
     } else if (!frame.fDamage.isEmpty()) {
       pieces.push_back(frame.fDamage);
     }
-    bool outline = false;
-    if constexpr (requires { hooks().outlineRepaints(std::as_const(model())); })
-      outline = hooks().outlineRepaints(std::as_const(model()));
-    // Outlines shown long enough, or no longer asked for: painted over.
     std::vector<skia::SkRect> painted = pieces;
-    std::erase_if(h.outlined, [&](const typename Canvas::Outline &one) {
-      if (outline && one.until > nowMs) return false;
-      painted.push_back(one.rect.makeOutset(2.0f, 2.0f));
-      return true;
-    });
+    for (const skia::SkRect &under : std::exchange(h.outlined, {}))
+      painted.push_back(under);
     std::erase_if(painted, [&](skia::SkRect &piece) { return !piece.intersect(seen); });
     if (painted.empty()) return;
     skia::SkCanvas &c = *h.canvas;
@@ -373,30 +362,21 @@ template <auto View, class Hooks = NoHooks> struct App {
       h.scene->draw(paint, &c);
       c.restore();
     }
-    // What this frame repainted, outlined, where that is asked for: kept
-    // for half a second, drawn again over what is repainted under it, then
-    // painted over.
+    // What this frame repainted, outlined, where that is asked for: drawn
+    // over the frame, and painted over at the next.
+    bool outline = false;
+    if constexpr (requires { hooks().outlineRepaints(std::as_const(model())); })
+      outline = hooks().outlineRepaints(std::as_const(model()));
     if (outline) {
-      if (!whole)
-        for (const skia::SkRect &piece : pieces) {
-          if (piece.isEmpty()) continue;
-          // The same piece again -- what moves every frame -- kept longer,
-          // not outlined twice.
-          const auto same = std::ranges::find_if(h.outlined, [&](const auto &one) {
-            return one.rect.fLeft == piece.fLeft && one.rect.fTop == piece.fTop && one.rect.fRight == piece.fRight &&
-                   one.rect.fBottom == piece.fBottom;
-          });
-          if (same != h.outlined.end())
-            same->until = nowMs + 500.0;
-          else
-            h.outlined.push_back({piece, nowMs + 500.0});
-        }
       skia::SkPaint stroke;
       stroke.setStyle(skia::SkPaint::kStroke_Style);
       stroke.setStrokeWidth(2.0f);
-      stroke.setColor(0xffff00a0u);
-      for (const auto &one : h.outlined)
-        c.drawRect(one.rect.makeInset(1.0f, 1.0f), stroke);
+      stroke.setColor(0xdcff00a0u);
+      for (const skia::SkRect &piece : pieces) {
+        if (piece.isEmpty()) continue;
+        c.drawRect(piece.makeInset(1.0f, 1.0f), stroke);
+        h.outlined.push_back(piece.makeOutset(2.0f, 2.0f));
+      }
     }
     c.restore();
   }
