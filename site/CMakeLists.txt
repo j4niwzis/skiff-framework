@@ -4,7 +4,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/import-std.cmake)
 # C++23 for every library this build makes, not only for the site's own
 # targets: splice takes the build's standard, and below 23 it is not itself.
 set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # skiff's site, written with skiff: one tree against skiff.ui on skiff.web.

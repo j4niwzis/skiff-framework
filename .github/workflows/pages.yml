@@ -70,6 +70,39 @@ jobs:
           /tmp/emsdk/emsdk install 6.0.13
           /tmp/emsdk/emsdk activate 6.0.13
 
+      # views::enumerate is libc++ 23's, and Emscripten's libc++ is 22: the
+      # view, from the libc++ 23 that came with clang 23, put into
+      # Emscripten's -- its header, <ranges> including it, the std module
+      # exporting it. Until an emsdk comes with libc++ 23.
+      - name: views::enumerate in Emscripten's libc++
+        run: |
+          python3 - <<'EOF'
+          import pathlib, shutil
+          e = pathlib.Path('/tmp/emsdk/upstream/emscripten')
+          view = pathlib.Path('/usr/lib/llvm-23/include/c++/v1/__ranges/enumerate_view.h')
+          places = [(e / 'system/lib/libcxx/include', e / 'system/lib/libcxx/modules/std/ranges.inc'),
+                    (e / 'cache/sysroot/include/c++/v1', e / 'cache/sysroot/share/libc++/v1/std/ranges.inc')]
+          export = ('\n    // [range.enumerate]\n    using std::ranges::enumerate_view;\n\n'
+                    '    namespace views {\n      using std::ranges::views::enumerate;\n    }\n')
+          for include, module in places:
+              if not (include / 'ranges').exists():
+                  continue
+              shutil.copy(view, include / '__ranges/enumerate_view.h')
+              ranges = (include / 'ranges').read_text()
+              if 'enumerate_view.h' not in ranges:
+                  at = '#    include <__ranges/elements_view.h>\n'
+                  assert at in ranges
+                  ranges = ranges.replace(at, at + '#    include <__ranges/enumerate_view.h>\n', 1)
+                  (include / 'ranges').write_text(ranges)
+              text = module.read_text()
+              if 'views::enumerate' not in text:
+                  at = '      using std::ranges::views::chunk_by;\n    }\n'
+                  assert at in text
+                  text = text.replace(at, at + export, 1)
+                  module.write_text(text)
+              print('enumerate put into', include)
+          EOF
+
       - name: the page, under Emscripten
         run: |
           source /tmp/emsdk/emsdk_env.sh

@@ -254,10 +254,16 @@ auto motion() {
                        side(bars(std::make_index_sequence<12>{}))));
 }
 
+// Shown while the backend chosen is this one. A type of its own rather than
+// a lambda made by a lambda: clang 23 recursed without end looking for the
+// definition of that inner closure from a unit importing this module.
+struct ShownIs {
+  Backend backend;
+  [[nodiscard]] scene::Spec operator()(const Shown &s) const { return {.visible = s.backend == backend}; }
+};
+
 auto backends() {
-  const auto when = [](Backend b) {
-    return [b](const Shown &s) { return scene::Spec{.visible = s.backend == b}; };
-  };
+  const auto when = [](Backend b) { return ShownIs{b}; };
   return section("backends", colour::kPaper, title("One tree, two backends", 44.0f, colour::kCoral),
                  words("skiff.ui is the same names on either backend: the program says which it is built for. Try changing it:"),
                  bound<model::Field<&Shown::backend>>(ChoiceTabs<Backend>(
