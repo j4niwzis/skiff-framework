@@ -258,7 +258,9 @@ struct BarLook {
     const double phase = c.seconds * 1.6 + index * 0.45;
     const float wave = static_cast<float>(0.5 + 0.5 * std::sin(phase));
     const std::array<scene::Colour, 3> colours{colour::kSea, colour::kCoral, colour::kSand};
-    return scene::Spec{.width = 60.0f + 520.0f * wave, .background = colours[static_cast<std::size_t>(index) % colours.size()]};
+    // A share of the column's width, not pixels: on a phone as on a screen.
+    return scene::Spec{.width = 0.1f + 0.9f * wave, .relativeSize = scene::axes::kX,
+                       .background = colours[static_cast<std::size_t>(index) % colours.size()]};
   }
 };
 auto bar(int i) { return spec_for<Clock>(BarLook{i}, Box<>(scene::Spec{.height = 14.0f, .cornerRadius = 7.0f})); }
@@ -324,12 +326,13 @@ auto footer() {
 inline constexpr std::string_view kSiteCss = R"(
 html,body{margin:0;background:#f4efe6}
 #skiff{font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1d2b36}
-.site-code{white-space:pre;display:block;overflow-x:auto;line-height:1.5}
+.site-code{white-space:pre;display:block;overflow-x:auto;line-height:1.5;max-width:100%;box-sizing:border-box}
 .site-link{text-decoration:none}
 .site-link:hover{text-decoration:underline}
 .site-frame{border:1px solid #c9bfb1;border-radius:10px;background:#f4efe6;width:100%}
 .site-picture{max-width:100%;border-radius:10px;display:block}
 #skiff .skiff-tab{color:#5a6b77;font-size:17px;padding:6px 0}
+@media (max-width:640px){[data-view=Header]{flex-wrap:wrap;row-gap:6px}}
 #skiff .skiff-tab:hover{color:#1d2b36}
 #skiff .skiff-tab[aria-selected=true]{color:#1d2b36;font-weight:700;box-shadow:inset 0 -2px #d9603b}
 )";
