@@ -150,12 +150,12 @@ auto pill(std::string text, scene::Colour plate, scene::Colour ink = colour::kFo
 }
 
 auto header() {
-  return row(hbox(24.0f, {.fillX = true, .autoSize = scene::axes::kY, .padding = {14.0f, 24.0f, 14.0f, 24.0f}, .background = colour::kInk}),
+  return SKIFF_NAMED(Header, row(hbox(24.0f, {.fillX = true, .autoSize = scene::axes::kY, .padding = {14.0f, 24.0f, 14.0f, 24.0f}, .background = colour::kInk}),
              Text("skiff", 26.0f, colour::kSand, true), Box<>(scene::Spec{.grow = scene::axes::kX}),
              Link("Docs", "https://github.com/j4niwzis/skiff#readme", 17.0f, colour::kPaper),
              Link("Widgets", "https://github.com/j4niwzis/skiff-widgets", 17.0f, colour::kPaper),
              Link("Framework", "https://github.com/j4niwzis/skiff-framework", 17.0f, colour::kPaper),
-             Link("GitHub", "https://github.com/j4niwzis/skiff", 17.0f, colour::kSand, true));
+             Link("GitHub", "https://github.com/j4niwzis/skiff", 17.0f, colour::kSand, true)));
 }
 
 [[nodiscard]] inline std::string whoIsLayingOut(const Shown &s) {
@@ -166,16 +166,16 @@ auto header() {
 }
 
 auto hero() {
-  return section("top", colour::kPaper,
+  return SKIFF_NAMED(Hero, section("top", colour::kPaper,
                  sides(side(title("A C++ UI library: a typed tree, a model it is bound to, and two backends.", 52.0f),
                             bound<Shown>(label<Shown>(whoIsLayingOut, 26.0f, colour::kCoral, true))),
                        column(vbox(12.0f, {.autoSize = scene::axes::kBoth, .alignSelf = scene::align::kMiddle}), pill("C++23 modules", colour::kSea),
                               pill("One tree, two backends", colour::kCoral), pill("A model you edit, a view that follows", colour::kInk),
-                              pill("No virtual calls in a release build", colour::kSea), pill("Tests without a browser", colour::kCoral))));
+                              pill("No virtual calls in a release build", colour::kSea), pill("Tests without a browser", colour::kCoral)))));
 }
 
 auto features() {
-  return section("features", colour::kInk,
+  return SKIFF_NAMED(Features, section("features", colour::kInk,
                  sides(side(Code("import skiff.ui;"), words("Modules all the way down: no headers to keep in step, one macro (SKIFF_NAMED).", 18.0f,
                                                                  colour::kPaper),
                             words("The tree is its type: what a node holds, how it is laid out and what it reads are known when it compiles.", 18.0f,
@@ -184,7 +184,7 @@ auto features() {
                             words("Natively, a scene drawn by Skia: every frame laid out, damaged and repainted where it changed.", 18.0f, colour::kPaper),
                             words("Here, the browser's own elements: a Box a div, a Text a span, a button a button -- laid out by the browser, written "
                                   "by skiff only where the model moved.",
-                                  18.0f, colour::kPaper))));
+                                  18.0f, colour::kPaper)))));
 }
 
 inline constexpr std::string_view kCounterSource = R"(auto counter() {
@@ -210,13 +210,13 @@ auto counter() {
 }
 
 auto declarative() {
-  return section("syntax", colour::kPaper, title("Declarative, and typed", 44.0f, colour::kCoral),
+  return SKIFF_NAMED(Syntax, section("syntax", colour::kPaper, title("Declarative, and typed", 44.0f, colour::kCoral),
                  sides(side(words("A screen is an expression: nested rows and columns of nodes, each said once, with what it reads from the model "
                                   "and what it sends."),
                             words("Mix it with C++ as it is: functions are components, loops make rows, an if is a part shown or not."),
                             card(colour::kInk, Code(std::string(kCounterSource)))),
                        side(card(colour::kPanel, Text("Live", 15.0f, colour::kMuted, true), counter(),
-                                 words("That is the code on the left, running: the same function, compiled into this page.", 15.0f, colour::kMuted)))));
+                                 words("That is the code on the left, running: the same function, compiled into this page.", 15.0f, colour::kMuted))))));
 }
 
 auto todoRow(const Todo &) {
@@ -227,7 +227,7 @@ auto todoRow(const Todo &) {
 }
 
 auto binding() {
-  return section("model", colour::kPanel, title("A model you edit, a view that follows", 44.0f, colour::kSea),
+  return SKIFF_NAMED(Binding, section("model", colour::kPanel, title("A model you edit, a view that follows", 44.0f, colour::kSea),
                  sides(side(words("The program's state is one model: tracked parts, lists of them by key. A control edits its part; the binding "
                                   "walks only to the nodes that read what changed."),
                             words("No observers to subscribe, no virtual DOM to diff: what reads a part is known from the tree's type."),
@@ -241,7 +241,7 @@ auto binding() {
                                  row(hbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}),
                                      styled({.grow = scene::axes::kX}, bound<model::Field<&Draft::text>>(TextField<std::string>("Something to do"))),
                                      bound<Draft>(AddButton())),
-                                 each<int, Todo>([](const Todo &t) { return todoRow(t); }, vbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}))))));
+                                 each<int, Todo>([](const Todo &t) { return todoRow(t); }, vbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY})))))));
 }
 
 // A bar of the moving section: its width and colour as the clock says. A
@@ -262,13 +262,13 @@ template <std::size_t... I> auto bars(std::index_sequence<I...>) {
 }
 
 auto motion() {
-  return section("motion", colour::kInk, title("Fast enough to move every frame", 44.0f, colour::kSand),
+  return SKIFF_NAMED(Motion, section("motion", colour::kInk, title("Fast enough to move every frame", 44.0f, colour::kSand),
                  sides(side(words("Each bar is a node, its width read from the model's clock. Every frame the clock moves, the binding walks to the "
                                   "bars that read it, and the page writes only the widths that changed.",
                                   18.0f, colour::kPaper),
                             words("Natively the same holds for the scene: what moved is damaged and repainted, the rest kept as it was drawn.", 18.0f,
                                   colour::kPaper)),
-                       side(bars(std::make_index_sequence<12>{}))));
+                       side(bars(std::make_index_sequence<12>{})))));
 }
 
 // Shown while the backend chosen is this one. A type of its own rather than
@@ -281,7 +281,7 @@ struct ShownIs {
 
 auto backends() {
   const auto when = [](Backend b) { return ShownIs{b}; };
-  return section("backends", colour::kPaper, title("One tree, two backends", 44.0f, colour::kCoral),
+  return SKIFF_NAMED(Backends, section("backends", colour::kPaper, title("One tree, two backends", 44.0f, colour::kCoral),
                  words("skiff.ui is the same names on either backend: the program says which it is built for. Try changing it:"),
                  bound<model::Field<&Shown::backend>>(ChoiceTabs<Backend>(
                      {{"This page", Backend::kPage}, {"Without JavaScript", Backend::kStatic}, {"On Skia", Backend::kScene}})),
@@ -298,11 +298,11 @@ auto backends() {
                                  card(colour::kPanel, words("Natively the same source is a scene drawn by Skia. Here, the maze visualizer: one tree "
                                                             "against skiff.ui, as a page in a browser and as a window on Skia."),
                                       sides(side(Text("As a page", 15.0f, colour::kMuted, true), Picture("mazes-page.png", "The maze visualizer as a page")),
-                                            side(Text("On Skia", 15.0f, colour::kMuted, true), Picture("mazes-skia.png", "The maze visualizer on Skia"))))));
+                                            side(Text("On Skia", 15.0f, colour::kMuted, true), Picture("mazes-skia.png", "The maze visualizer on Skia")))))));
 }
 
 auto footer() {
-  return section("footer", colour::kInk,
+  return SKIFF_NAMED(Footer, section("footer", colour::kInk,
                  sides(side(Text("skiff", 22.0f, colour::kSand, true),
                             words("This page is site/ in skiff-framework: skiff.ui on skiff.web, built with Emscripten, served by GitHub Pages.", 15.0f,
                                   colour::kPaper)),
@@ -311,7 +311,7 @@ auto footer() {
                                 Link("skiff-widgets", "https://github.com/j4niwzis/skiff-widgets", 16.0f, colour::kPaper),
                                 Link("knot", "https://github.com/j4niwzis/knot", 16.0f, colour::kPaper),
                                 Link("chevron", "https://github.com/j4niwzis/chevron", 16.0f, colour::kPaper),
-                                Link("alef", "https://github.com/j4niwzis/alef", 16.0f, colour::kPaper)))));
+                                Link("alef", "https://github.com/j4niwzis/alef", 16.0f, colour::kPaper))))));
 }
 
 // The stylesheet the site adds to skiff's: the page's font, code kept as it
@@ -337,9 +337,8 @@ auto page() {
                                    model::over<Draft>(model::setTo(Draft{}))};
                }),
                handle<RemoveTodo>([](const RemoveTodo &remove) { return model::take<Todo>(remove.id); })),
-      column(vbox(0.0f, {.fillX = true, .autoSize = scene::axes::kY}), SKIFF_NAMED(Header, header()), SKIFF_NAMED(Hero, hero()),
-             SKIFF_NAMED(Features, features()), SKIFF_NAMED(Syntax, declarative()), SKIFF_NAMED(Binding, binding()),
-             SKIFF_NAMED(Motion, motion()), SKIFF_NAMED(Backends, backends()), SKIFF_NAMED(Footer, footer())));
+      column(vbox(0.0f, {.fillX = true, .autoSize = scene::axes::kY}), header(), hero(), features(), declarative(), binding(), motion(),
+             backends(), footer()));
 }
 
 } // namespace site
