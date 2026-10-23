@@ -14,13 +14,13 @@ import site.page;
 
 namespace {
 site::Model gModel;
-using Tree = decltype(site::page());
+using Tree = decltype(site::html::page());
 std::optional<skiff::ui::Page<Tree, site::Model>> gPage;
 
 void mountPage() {
   skiff::ui::mountTheme(skiff::web::dom::root());
-  skiff::web::mountStylesheet(skiff::web::dom::root(), site::kSiteCss);
-  gPage.emplace(site::page(), gModel);
+  skiff::web::mountStylesheet(skiff::web::dom::root(), site::html::kSiteCss);
+  gPage.emplace(site::html::page(), gModel);
   gPage->mount();
 }
 } // namespace
@@ -48,7 +48,7 @@ int main() {
   // elements, now the live page's. Where there is none, made.
   const skiff::web::dom::Handle root = skiff::web::dom::root();
   if (skiff::web::dom::children(root) >= 3) {
-    gPage.emplace(site::page(), gModel);
+    gPage.emplace(site::html::page(), gModel);
     gPage->hydrate(root, 2);
   } else {
     mountPage();
