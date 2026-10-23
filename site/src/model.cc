@@ -32,7 +32,7 @@ struct Clock {
   friend bool operator==(const Clock &, const Clock &) = default;
 };
 
-enum class Backend { kPage, kStatic, kScene };
+enum class Backend { kPage, kScene };
 struct Shown {
   Backend backend = Backend::kPage;
   // Whether the page is alive in the browser (WebAssembly), or the copy of

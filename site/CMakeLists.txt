@@ -6,10 +6,13 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/import-std.cmake)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# skiff's site, written with skiff: one tree against skiff.ui on skiff.web.
+# skiff's site, written with skiff: one tree, against skiff.ui on skiff.web
+# (the page) and against skiff's scene (the same page drawn on a canvas).
 # Under Emscripten, the page itself (index.html, .js, .wasm); natively, the
 # program that writes it out when the site is built (static.html, and the
-# markup put into the page Emscripten made). Nothing of Skia in either.
+# markup put into the page Emscripten made). Nothing of Skia in either: the
+# scene is built on skiff's stand-in for its types (SKIFF_SKIA off), which in
+# a browser draws by the canvas's 2D context.
 #
 # skiff-widgets (and skiff through it) comes from cmake-everywhere: from this
 # build where it is already in it, else from the revision named below.
@@ -20,8 +23,9 @@ endif()
 project(skiff_site VERSION 0.1.0 LANGUAGES CXX)
 
 if(NOT TARGET skiff::ui)
-  # The page's backend, and no scene: skiff.ui is skiff.web's names.
-  set(SKIFF_UI OFF CACHE BOOL "" FORCE)
+  # skiff.ui is skiff.web's names; the scene beside it, without Skia.
+  set(SKIFF_UI ON CACHE BOOL "" FORCE)
+  set(SKIFF_SKIA OFF CACHE BOOL "" FORCE)
   set(SKIFF_WEB ON CACHE BOOL "" FORCE)
   set(SKIFF_UI_BACKEND web CACHE STRING "" FORCE)
   # No threads: a page served as files (GitHub Pages) cannot say the headers
@@ -33,7 +37,7 @@ if(COMMAND cme_declare_port AND NOT TARGET skiff::ui)
     NAME skiff-widgets
     PROVIDES skiff-widgets skiff_widgets
     GITHUB_REPOSITORY j4niwzis/skiff-widgets
-    GIT_TAG acbb90247cc7c580e587bcf204a36beb45de5c92
+    GIT_TAG 6746e2acd0a550c5758ec7ec1e1d2b3225d97293
     VERSION 0.1.0
   )
 endif()
@@ -51,10 +55,14 @@ endif()
 add_library(site_ui STATIC)
 target_sources(site_ui PUBLIC FILE_SET CXX_MODULES FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/src/model.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/page.cc)
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/page.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/canvas.cc)
 set_target_properties(site_ui PROPERTIES CXX_STANDARD 23)
 target_compile_features(site_ui PUBLIC cxx_std_23)
-target_link_libraries(site_ui PUBLIC skiff::ui)
+target_link_libraries(site_ui PUBLIC skiff::ui skiff::widgets)
+# The tree said once (body.inc) and what both backends share, included.
+set_property(SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/page.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/canvas.cc APPEND PROPERTY OBJECT_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/body.inc ${CMAKE_CURRENT_SOURCE_DIR}/src/palette.inc ${CMAKE_CURRENT_SOURCE_DIR}/src/tokens.inc)
 
 add_executable(site ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
 target_link_libraries(site PRIVATE site_ui)
@@ -63,7 +71,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   set_target_properties(site PROPERTIES OUTPUT_NAME index SUFFIX .html)
   target_link_options(site PRIVATE -fexceptions
     -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=ccall
-    -sEXPORTED_FUNCTIONS=_main,_skiff_web_event
+    -sEXPORTED_FUNCTIONS=_main,_skiff_web_event,_skiff_canvas_pointer,_skiff_canvas_key,_skiff_canvas_text
     -sSTACK_SIZE=4194304
     --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/web/index.html)
   set_property(TARGET site APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/web/index.html)

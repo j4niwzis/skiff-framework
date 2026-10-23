@@ -1,6 +1,6 @@
 // The site's tree, said once for both of its backends: included where each
 // says its names -- skiff.ui on the page (page.cc), skiff's scene on a canvas
-// (canvas.cc) -- after the nodes each has of its own (Link, Code, Framed)
+// (canvas.cc) -- after the nodes each has of its own (Link, Code)
 // and kOnCanvas, which of the two it is.
 // A text that reads its part of the model.
 template <class T, class F> struct Label : Text {
@@ -239,7 +239,7 @@ auto backends() {
   return SKIFF_NAMED(Backends, section("backends", colour::kPaper, title("One tree, two backends", 44.0f, colour::kCoral),
                  words("skiff.ui is the same names on either backend: the program says which it is built for. Try changing it:"),
                  bound<model::Field<&Shown::backend>>(ChoiceTabs<Backend>(
-                     {{"Page", Backend::kPage}, {"Without JavaScript", Backend::kStatic}, {"Canvas", Backend::kScene}})),
+                     {{"Page", Backend::kPage}, {"Canvas", Backend::kScene}})),
                  spec_for<Shown>(when(Backend::kPage),
                                  card(colour::kPanel, words(kOnCanvas ? "Choose it to go back to the page: the same tree, its nodes the document's "
                                                                         "elements, laid out by the browser and bound to the model."
@@ -247,11 +247,6 @@ auto backends() {
                                                                         "document and binds it to the model. The page is C++ compiled to "
                                                                         "WebAssembly; there is no framework of JavaScript under it, only "
                                                                         "the few lines that pass the document's events in."))),
-                 spec_for<Shown>(when(Backend::kStatic),
-                                 card(colour::kPanel, words("The same tree, written out when the site was built: mounted natively on a document kept in "
-                                                            "memory and saved as HTML -- what a search engine and a slow phone see first. No script "
-                                                            "at all:"),
-                                      Framed("static.html", {.fillX = true, .height = 520.0f}))),
                  spec_for<Shown>(when(Backend::kScene),
                                  card(colour::kPanel, words(kOnCanvas ? "You are looking at it: this whole page drawn by skiff's own scene on a canvas -- "
                                                                         "laid out by skiff, not the browser, drawn through its painter on "
