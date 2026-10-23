@@ -501,7 +501,7 @@ auto backends() {
                                                             words("You are looking at it: this whole page drawn by skiff's own scene on a "
                                                                   "canvas -- laid out by skiff, not the browser, drawn through its painter "
                                                                   "on the browser's 2D context, and repainted only where it changed. No "
-                                                                  "Skia: skiff's stand-in for its types draws what the scene asks."))))))));
+                                                                  "Skia: skiff's stand-in for its types draws what the scene asks.")))))));
 }
 
 auto footer() {
