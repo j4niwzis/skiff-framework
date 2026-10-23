@@ -82,7 +82,8 @@ constexpr std::string_view kTail = "</div>\n</body>\n</html>\n";
 } // namespace
 
 // site [static.html] [index.html]: the page written out whole, and put into
-// the page Emscripten made, in place of <!--PRERENDER-->.
+// the page Emscripten made, in place of @@SKIFF-PRERENDER@@ -- text, which
+// Emscripten keeps as it minifies the page; a comment it takes out.
 int main(int argc, char **argv) {
   site::seed(gModel);
   mountPage();
@@ -100,12 +101,13 @@ int main(int argc, char **argv) {
   }
   if (argc >= 3) {
     std::string page = read(argv[2]);
-    const std::size_t at = page.find("<!--PRERENDER-->");
+    constexpr std::string_view kMark = "@@SKIFF-PRERENDER@@";
+    const std::size_t at = page.find(kMark);
     if (at == std::string::npos) {
-      std::println(std::cerr, "site: no <!--PRERENDER--> in {}", argv[2]);
+      std::println(std::cerr, "site: no {} in {}", kMark, argv[2]);
       return 1;
     }
-    page.replace(at, std::string_view("<!--PRERENDER-->").size(), markup);
+    page.replace(at, kMark.size(), markup);
     if (!write(argv[2], page)) {
       std::println(std::cerr, "site: cannot write {}", argv[2]);
       return 1;
