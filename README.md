@@ -37,7 +37,7 @@ emcmake cmake -S site -B build/wasm -G Ninja -DCMAKE_BUILD_TYPE=Release \
 cmake --build build/wasm --target site
 cmake -S site -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/native --target site
-mkdir -p public && cp build/wasm/index.{html,js,wasm} site/web/*.png public/
+mkdir -p public && cp build/wasm/index.{html,js,wasm} public/
 build/native/site public/static.html public/index.html
 ```
 

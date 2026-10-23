@@ -135,7 +135,6 @@ jobs:
         run: |
           mkdir -p public
           cp build/wasm/index.html build/wasm/index.js build/wasm/index.wasm public/
-          cp site/web/*.png public/
           build/native/site public/static.html public/index.html
           ls -la public
 

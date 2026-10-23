@@ -48,28 +48,70 @@ struct Link : Text {
   }
   std::string fHref;
 };
-// Code, as it is written: monospace, its lines kept.
-struct Code : Text {
-  explicit Code(std::string code) : Text(std::move(code), 13.5f, colour::kCodeInk) {
-    setMonospace(true);
-    setWrapped(true);
-  }
+// Code, as it is written -- its lines kept -- and coloured as an editor
+// colours C++: each word, string, number and comment a span of its kind.
+struct Code : skiff::web::Node {
+  explicit Code(std::string code) : fCode(std::move(code)) {}
+  [[nodiscard]] static constexpr std::string_view tag() { return "pre"; }
   void mounted() {
-    Text::mounted();
-    dom::attr(fState.fHandle, "class", "skiff-text site-code");
+    dom::attr(fState.fHandle, "class", "site-code");
+    for (const auto &[kind, text] : tokens(fCode)) {
+      const dom::Handle span = dom::create("span");
+      if (!kind.empty()) dom::attr(span, "class", std::string("c-").append(kind));
+      dom::text(span, text);
+      dom::append(fState.fHandle, span);
+    }
   }
-};
-// A picture from a file beside the page.
-struct Picture : skiff::web::Node {
-  Picture(std::string src, std::string alt, scene::Spec spec = {}) : fSrc(std::move(src)), fAlt(std::move(alt)) { fState.apply(spec); }
-  [[nodiscard]] static constexpr std::string_view tag() { return "img"; }
-  void mounted() {
-    dom::attr(fState.fHandle, "src", fSrc);
-    dom::attr(fState.fHandle, "alt", fAlt);
-    dom::attr(fState.fHandle, "loading", "lazy");
-    dom::attr(fState.fHandle, "class", "site-picture");
+  // The code cut into runs of a kind: "kw", "name", "str", "num", "com", or
+  // "" for the rest.
+  [[nodiscard]] static std::vector<std::pair<std::string_view, std::string_view>> tokens(std::string_view code) {
+    static constexpr std::array<std::string_view, 24> kKeywords{
+        "auto", "return", "const", "constexpr", "struct", "class", "template", "typename", "using", "namespace", "if", "else",
+        "for", "while", "static", "inline", "void", "bool", "int", "float", "true", "false", "import", "this"};
+    std::vector<std::pair<std::string_view, std::string_view>> out;
+    const auto add = [&](std::string_view kind, std::size_t from, std::size_t to) {
+      if (to <= from) return;
+      if (kind.empty() && !out.empty() && out.back().first.empty())
+        out.back().second = code.substr(out.back().second.data() - code.data(), to - (out.back().second.data() - code.data()));
+      else
+        out.emplace_back(kind, code.substr(from, to - from));
+    };
+    const auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    std::size_t i = 0;
+    while (i < code.size()) {
+      const char c = code[i];
+      if (code.substr(i, 2) == "//") {
+        const std::size_t end = std::min(code.find('\n', i), code.size());
+        add("com", i, end);
+        i = end;
+      } else if (c == '"' || c == '\'') {
+        std::size_t end = i + 1;
+        while (end < code.size() && code[end] != c) end += code[end] == '\\' ? 2 : 1;
+        end = std::min(end + 1, code.size());
+        add("str", i, end);
+        i = end;
+      } else if (std::isdigit(static_cast<unsigned char>(c))) {
+        std::size_t end = i;
+        while (end < code.size() && (word(code[end]) || code[end] == '.')) ++end;
+        add("num", i, end);
+        i = end;
+      } else if (word(c)) {
+        std::size_t end = i;
+        while (end < code.size() && word(code[end])) ++end;
+        const std::string_view w = code.substr(i, end - i);
+        std::size_t next = end;
+        while (next < code.size() && code[next] == ' ') ++next;
+        const bool called = next < code.size() && (code[next] == '(' || code[next] == '<');
+        add(std::ranges::contains(kKeywords, w) ? "kw" : (called || std::isupper(static_cast<unsigned char>(w[0]))) ? "name" : "", i, end);
+        i = end;
+      } else {
+        add("", i, i + 1);
+        ++i;
+      }
+    }
+    return out;
   }
-  std::string fSrc, fAlt;
+  std::string fCode;
 };
 // Another page, framed: the copy of this one written when the site was built.
 struct Framed : skiff::web::Node {
@@ -239,7 +281,9 @@ auto binding() {
                             card(colour::kInk, Code(R"(each<int, Todo>([](const Todo &) {
   return row(hbox(10.0f),
       bound<model::Field<&Todo::done>>(ToggleField()),
-      bound<Todo>(label<Todo>([](const Todo &t) { return t.text; })),
+      bound<Todo>(label<Todo>([](const Todo &t) {
+        return t.text;
+      })),
       bound<Todo>(RemoveButton()));
 }))"))),
                        side(card(colour::kPaper, Text("Live", 15.0f, colour::kMuted, true),
@@ -291,7 +335,7 @@ auto backends() {
   return SKIFF_NAMED(Backends, section("backends", colour::kPaper, title("One tree, two backends", 44.0f, colour::kCoral),
                  words("skiff.ui is the same names on either backend: the program says which it is built for. Try changing it:"),
                  bound<model::Field<&Shown::backend>>(ChoiceTabs<Backend>(
-                     {{"This page", Backend::kPage}, {"Without JavaScript", Backend::kStatic}, {"On Skia", Backend::kScene}})),
+                     {{"This page", Backend::kPage}, {"Without JavaScript", Backend::kStatic}, {"Canvas", Backend::kScene}})),
                  spec_for<Shown>(when(Backend::kPage),
                                  card(colour::kPanel, words("You are looking at it: skiff.web makes each node an element of the document and binds it "
                                                             "to the model. The page is C++ compiled to WebAssembly; there is no framework of "
@@ -302,10 +346,9 @@ auto backends() {
                                                             "at all:"),
                                       Framed("static.html", {.fillX = true, .height = 520.0f}))),
                  spec_for<Shown>(when(Backend::kScene),
-                                 card(colour::kPanel, words("Natively the same source is a scene drawn by Skia. Here, the maze visualizer: one tree "
-                                                            "against skiff.ui, as a page in a browser and as a window on Skia."),
-                                      sides(side(Text("As a page", 15.0f, colour::kMuted, true), Picture("mazes-page.png", "The maze visualizer as a page")),
-                                            side(Text("On Skia", 15.0f, colour::kMuted, true), Picture("mazes-skia.png", "The maze visualizer on Skia")))))));
+                                 card(colour::kPanel, words("Natively the same tree is a scene: laid out and drawn by skiff itself, each frame "
+                                                            "damaged and repainted where it changed. Here the scene draws on a canvas -- "
+                                                            "coming next."))));
 }
 
 auto footer() {
@@ -326,11 +369,11 @@ auto footer() {
 inline constexpr std::string_view kSiteCss = R"(
 html,body{margin:0;background:#f4efe6}
 #skiff{font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1d2b36}
-.site-code{white-space:pre;display:block;overflow-x:auto;line-height:1.5;max-width:100%;box-sizing:border-box}
+.site-code{margin:0;white-space:pre;display:block;overflow-x:auto;max-width:100%;box-sizing:border-box;font:13.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e8eef2}
+.c-kw{color:#ff9d76}.c-name{color:#8fd3e0}.c-str{color:#e7c79b}.c-num{color:#f2b5d4}.c-com{color:#7d8f9b;font-style:italic}
 .site-link{text-decoration:none}
 .site-link:hover{text-decoration:underline}
 .site-frame{border:1px solid #c9bfb1;border-radius:10px;background:#f4efe6;width:100%}
-.site-picture{max-width:100%;border-radius:10px;display:block}
 #skiff .skiff-tab{color:#5a6b77;font-size:17px;padding:6px 0}
 @media (max-width:640px){[data-view=Header]{flex-wrap:wrap;row-gap:6px}}
 #skiff .skiff-tab:hover{color:#1d2b36}

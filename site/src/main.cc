@@ -43,11 +43,16 @@ int main() {
     s.live = true;
     return s;
   }));
-  // The copy written when the site was built, gone: the live page in its place.
-  // The document's root found first: reset() clears what it has found.
-  (void)skiff::web::dom::root();
-  skiff::web::dom::reset();
-  mountPage();
+  // The copy written when the site was built -- the theme, the site's
+  // stylesheet, then the page -- taken over, not made again: the same
+  // elements, now the live page's. Where there is none, made.
+  const skiff::web::dom::Handle root = skiff::web::dom::root();
+  if (skiff::web::dom::children(root) >= 3) {
+    gPage.emplace(site::page(), gModel);
+    gPage->hydrate(root, 2);
+  } else {
+    mountPage();
+  }
   gStart = emscripten_get_now();
   emscripten_set_main_loop(tick, 0, 0);
   return 0;
