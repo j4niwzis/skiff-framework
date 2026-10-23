@@ -15,6 +15,12 @@ namespace site {
 using namespace skiff;
 using namespace skiff::ui;
 namespace dom = skiff::web::dom;
+} // namespace site
+
+// Exported, every piece: as the maze visualizer's are. Kept to the module,
+// clang 23 recursed without end looking for their definitions from the unit
+// importing the page (Sema::hasAcceptableDefinition).
+export namespace site {
 
 namespace colour {
 inline constexpr scene::Colour kPaper = 0xfff4efe6u;  // sailcloth
@@ -229,17 +235,19 @@ auto binding() {
                                  each<int, Todo>([](const Todo &t) { return todoRow(t); }, vbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}))))));
 }
 
-// A bar of the moving section: its width and colour as the clock says.
-auto bar(int i) {
-  return spec_for<Clock>(
-      [i](const Clock &c) {
-        const double phase = c.seconds * 1.6 + i * 0.45;
-        const float wave = static_cast<float>(0.5 + 0.5 * std::sin(phase));
-        const std::array<scene::Colour, 3> colours{colour::kSea, colour::kCoral, colour::kSand};
-        return scene::Spec{.width = 60.0f + 520.0f * wave, .background = colours[static_cast<std::size_t>(i) % colours.size()]};
-      },
-      Box<>(scene::Spec{.height = 14.0f, .cornerRadius = 7.0f}));
-}
+// A bar of the moving section: its width and colour as the clock says. A
+// type of its own, not a lambda that captures: clang 23 recursed without end
+// looking for such a closure's definition from the unit importing the page.
+struct BarLook {
+  int index = 0;
+  [[nodiscard]] scene::Spec operator()(const Clock &c) const {
+    const double phase = c.seconds * 1.6 + index * 0.45;
+    const float wave = static_cast<float>(0.5 + 0.5 * std::sin(phase));
+    const std::array<scene::Colour, 3> colours{colour::kSea, colour::kCoral, colour::kSand};
+    return scene::Spec{.width = 60.0f + 520.0f * wave, .background = colours[static_cast<std::size_t>(index) % colours.size()]};
+  }
+};
+auto bar(int i) { return spec_for<Clock>(BarLook{i}, Box<>(scene::Spec{.height = 14.0f, .cornerRadius = 7.0f})); }
 template <std::size_t... I> auto bars(std::index_sequence<I...>) {
   return column(vbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}), bar(static_cast<int>(I))...);
 }
@@ -296,10 +304,6 @@ auto footer() {
                                 Link("chevron", "https://github.com/j4niwzis/chevron", 16.0f, colour::kPaper),
                                 Link("alef", "https://github.com/j4niwzis/alef", 16.0f, colour::kPaper)))));
 }
-
-} // namespace site
-
-export namespace site {
 
 // The stylesheet the site adds to skiff's: the page's font, code kept as it
 // is written, links, the framed copy and the pictures.
