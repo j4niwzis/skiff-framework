@@ -44,6 +44,8 @@ int main() {
     return s;
   }));
   // The copy written when the site was built, gone: the live page in its place.
+  // The document's root found first: reset() clears what it has found.
+  (void)skiff::web::dom::root();
   skiff::web::dom::reset();
   mountPage();
   gStart = emscripten_get_now();

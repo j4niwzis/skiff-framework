@@ -198,7 +198,10 @@ inline constexpr std::string_view kCounterSource = R"(auto counter() {
 }
 // ...and what the buttons send, answered:
 handle<Increment>([] {
-  return model::over<Counter>([](Counter c) { ++c.count; return c; });
+  return model::over<Counter>([](Counter c) {
+    ++c.count;
+    return c;
+  });
 })
 )";
 
@@ -220,10 +223,12 @@ auto declarative() {
 }
 
 auto todoRow(const Todo &) {
-  return bound<Todo>(row(hbox(10.0f, {.fillX = true, .autoSize = scene::axes::kY, .padding = {6.0f, 10.0f, 6.0f, 10.0f}, .cornerRadius = 8.0f,
-                                      .background = colour::kFoam}),
-                         bound<model::Field<&Todo::done>>(ToggleField()),
-                         styled({.grow = scene::axes::kX}, label<Todo>([](const Todo &t) { return t.text; }, 17.0f)), RemoveButton()));
+  // Each part reads the row's element itself: the row is only where they sit.
+  return row(hbox(10.0f, {.fillX = true, .autoSize = scene::axes::kY, .padding = {6.0f, 10.0f, 6.0f, 10.0f}, .cornerRadius = 8.0f,
+                          .background = colour::kFoam}),
+             bound<model::Field<&Todo::done>>(ToggleField()),
+             styled({.grow = scene::axes::kX}, bound<Todo>(label<Todo>([](const Todo &t) { return t.text; }, 17.0f))),
+             bound<Todo>(RemoveButton()));
 }
 
 auto binding() {
@@ -232,10 +237,10 @@ auto binding() {
                                   "walks only to the nodes that read what changed."),
                             words("No observers to subscribe, no virtual DOM to diff: what reads a part is known from the tree's type."),
                             card(colour::kInk, Code(R"(each<int, Todo>([](const Todo &) {
-  return bound<Todo>(row(hbox(10.0f),
+  return row(hbox(10.0f),
       bound<model::Field<&Todo::done>>(ToggleField()),
-      label<Todo>([](const Todo &t) { return t.text; }),
-      RemoveButton()));
+      bound<Todo>(label<Todo>([](const Todo &t) { return t.text; })),
+      bound<Todo>(RemoveButton()));
 }))"))),
                        side(card(colour::kPaper, Text("Live", 15.0f, colour::kMuted, true),
                                  row(hbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}),
@@ -324,6 +329,9 @@ html,body{margin:0;background:#f4efe6}
 .site-link:hover{text-decoration:underline}
 .site-frame{border:1px solid #c9bfb1;border-radius:10px;background:#f4efe6;width:100%}
 .site-picture{max-width:100%;border-radius:10px;display:block}
+#skiff .skiff-tab{color:#5a6b77;font-size:17px;padding:6px 0}
+#skiff .skiff-tab:hover{color:#1d2b36}
+#skiff .skiff-tab[aria-selected=true]{color:#1d2b36;font-weight:700;box-shadow:inset 0 -2px #d9603b}
 )";
 
 auto page() {
