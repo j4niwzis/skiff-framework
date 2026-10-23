@@ -481,6 +481,17 @@ struct ShownIs {
   [[nodiscard]] scene::Spec operator()(const Shown &s) const { return {.visible = s.backend == backend}; }
 };
 
+// Whether the canvas outlines what each frame repaints: read by the program
+// that draws it (main.cc), switched on the canvas's card.
+struct Repaints {
+  bool shown = false;
+  friend bool operator==(const Repaints &, const Repaints &) = default;
+};
+auto repaintsSwitch() {
+  return state<Repaints>(row(hbox(10.0f, {.autoSize = scene::axes::kBoth}), bound<model::Field<&Repaints::shown>>(ToggleField()),
+                             Text("Outline what each frame repaints", 16.0f, colour::kInk)));
+}
+
 auto backends() {
   const auto when = [](Backend b) { return ShownIs{b}; };
   return SKIFF_NAMED(Backends, state<Shown>(section("backends", colour::kPaper, title("One tree, two backends", 44.0f, colour::kCoral),
@@ -502,7 +513,8 @@ auto backends() {
                                                             words("You are looking at it: this whole page drawn by skiff's own scene on a "
                                                                   "canvas -- laid out by skiff, not the browser, drawn through its painter "
                                                                   "on the browser's 2D context, and repainted only where it changed. No "
-                                                                  "Skia: skiff's stand-in for its types draws what the scene asks.")))))));
+                                                                  "Skia: skiff's stand-in for its types draws what the scene asks.")),
+                                      repaintsSwitch())))));
 }
 
 auto footer() {

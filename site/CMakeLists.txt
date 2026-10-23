@@ -38,7 +38,7 @@ if(COMMAND cme_declare_port AND NOT TARGET skiff::ui)
     NAME skiff-widgets
     PROVIDES skiff-widgets skiff_widgets
     GITHUB_REPOSITORY j4niwzis/skiff-widgets
-    GIT_TAG 05ebdcbf43a34c41252009298729ef96d6656d4b
+    GIT_TAG 3a1616ccad37956734b13f72d55f59b960ef6cdd
     VERSION 0.1.0
   )
 endif()

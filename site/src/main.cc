@@ -140,6 +140,8 @@ struct CanvasHost {
   double scale = 0.0, offset = -1.0;
   float tall = 0.0f;
   bool shown = false;
+  // Where the last frame outlined what it repainted: painted over next.
+  std::vector<skia::SkRect> outlined;
 };
 CanvasHost gCanvas;
 
@@ -220,22 +222,50 @@ void canvasFrame(double nowMs) {
     h.offset = offset;
     whole = true;
   }
-  if (!whole && frame.fDamage.isEmpty()) return;
+  // What is repainted: all of it, where the canvas or the scroll moved;
+  // else what the scene damaged, piece by piece -- and where the last frame
+  // outlined its repaints, under those outlines, so none is left behind.
+  const skia::SkRect seen = skia::SkRect::MakeXYWH(0.0f, static_cast<float>(offset), static_cast<float>(width), static_cast<float>(height));
+  std::vector<skia::SkRect> pieces;
+  if (whole) {
+    pieces.push_back(seen);
+    h.outlined.clear();
+  } else if (!frame.fDamageRects.empty()) {
+    pieces = frame.fDamageRects;
+  } else if (!frame.fDamage.isEmpty()) {
+    pieces.push_back(frame.fDamage);
+  }
+  std::vector<skia::SkRect> painted = pieces;
+  for (const skia::SkRect &under : std::exchange(h.outlined, {}))
+    painted.push_back(under);
+  std::erase_if(painted, [&](skia::SkRect &piece) { return !piece.intersect(seen); });
+  if (painted.empty()) return;
   skia::SkCanvas &c = *h.canvas;
   skiff::scene::detail::PlainPaint paint;
   skia::SkPaint paper;
   paper.setColor(site::colour::kPaper);
   c.save();
   c.translate(0.0f, -static_cast<float>(offset));
-  const skia::SkRect seen = skia::SkRect::MakeXYWH(0.0f, static_cast<float>(offset), static_cast<float>(width), static_cast<float>(height));
-  skia::SkRect redrawn = whole ? seen : frame.fDamage;
-  if (!whole && !redrawn.intersect(seen)) {
+  for (const skia::SkRect &piece : painted) {
+    c.save();
+    c.clipRect(piece);
+    c.drawRect(piece, paper);
+    h.scene->draw(paint, &c);
     c.restore();
-    return;
   }
-  c.clipRect(redrawn);
-  c.drawRect(redrawn, paper);
-  h.scene->draw(paint, &c);
+  // What this frame repainted, outlined, where that is asked for: drawn
+  // over the frame, and painted over at the next.
+  if (gModel.look<site::Repaints>()->shown) {
+    skia::SkPaint outline;
+    outline.setStyle(skia::SkPaint::kStroke_Style);
+    outline.setStrokeWidth(2.0f);
+    outline.setColor(0xdcff00a0u);
+    for (const skia::SkRect &piece : pieces) {
+      if (piece.isEmpty()) continue;
+      c.drawRect(piece.makeInset(1.0f, 1.0f), outline);
+      h.outlined.push_back(piece.makeOutset(2.0f, 2.0f));
+    }
+  }
   c.restore();
 }
 } // namespace
