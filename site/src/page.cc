@@ -99,6 +99,15 @@ struct RemoveButton : SendButton<RemoveTodo> {
   RemoveButton() : SendButton<RemoveTodo>("×", RemoveTodo{}) {}
   void read(const Todo &t) { SendButton<RemoveTodo>::read(RemoveTodo{t.id}); }
 };
+// A thing to do put into the list, where it says something: an Add with
+// nothing typed puts nothing.
+struct PutTodo {
+  Todo todo;
+  void operator()(model::Keyed<int, Todo> &list) const {
+    if (!todo.text.empty())
+      list.put(todo.id, todo, std::numeric_limits<std::size_t>::max());
+  }
+};
 // The button that adds what is typed.
 struct AddButton : SendButton<AddTodo> {
   AddButton() : SendButton<AddTodo>("Add", AddTodo{}) {}
@@ -323,10 +332,9 @@ auto page() {
                handle<Decrement>([] { return model::over<Counter>([](Counter c) { --c.count; return c; }); }),
                handle<AddTodo>([](const AddTodo &add) {
                  static int next = 100;
-                 using Answer = std::tuple<decltype(model::put<Todo>(0, Todo{})), decltype(model::over<Draft>(model::setTo(Draft{})))>;
-                 if (add.text.empty()) return std::optional<Answer>();
                  const int id = next++;
-                 return std::optional<Answer>(Answer{model::put<Todo>(id, Todo{id, add.text, false}), model::over<Draft>(model::setTo(Draft{}))});
+                 return std::tuple{model::over<model::Keyed<int, Todo>>(PutTodo{Todo{id, add.text, false}}),
+                                   model::over<Draft>(model::setTo(Draft{}))};
                }),
                handle<RemoveTodo>([](const RemoveTodo &remove) { return model::take<Todo>(remove.id); })),
       column(vbox(0.0f, {.fillX = true, .autoSize = scene::axes::kY}), SKIFF_NAMED(Header, header()), SKIFF_NAMED(Hero, hero()),

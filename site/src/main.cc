@@ -86,6 +86,9 @@ constexpr std::string_view kTail = "</div>\n</body>\n</html>\n";
 int main(int argc, char **argv) {
   site::seed(gModel);
   mountPage();
+  // The page's events, compiled here as in the browser (never taken here):
+  // what they answer is checked by this build too.
+  if (argc < 0) gPage->event(0, {}, {});
   const std::string markup = inner(skiff::web::dom::dump(skiff::web::dom::root()));
   if (argc < 2) {
     std::print("{}{}{}", kHead, markup, kTail);
