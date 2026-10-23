@@ -293,33 +293,43 @@ auto binding() {
                                  each<int, Todo>([](const Todo &t) { return todoRow(t); }, vbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY})))))));
 }
 
-// A bar of the moving section: its width and colour as the clock says. A
-// type of its own, not a lambda that captures: clang 23 recursed without end
-// looking for such a closure's definition from the unit importing the page.
-struct BarLook {
-  int index = 0;
+// Two colours mixed: `t` of the way from one to the other.
+[[nodiscard]] inline scene::Colour mix(scene::Colour a, scene::Colour b, float t) {
+  const auto channel = [&](int shift) {
+    const float x = static_cast<float>((a >> shift) & 0xffu), y = static_cast<float>((b >> shift) & 0xffu);
+    return static_cast<scene::Colour>(std::lround(x + (y - x) * t)) << shift;
+  };
+  return channel(24) | channel(16) | channel(8) | channel(0);
+}
+// The moving box: as wide as the clock says, from a third of its column to
+// all of it and back, its colour going from the sea's to the coral's -- its
+// words wrapped anew at every width. What clay shows of its own speed.
+struct BreathingLook {
   [[nodiscard]] scene::Spec operator()(const Clock &c) const {
-    const double phase = c.seconds * 1.6 + index * 0.45;
-    const float wave = static_cast<float>(0.5 + 0.5 * std::sin(phase));
-    const std::array<scene::Colour, 3> colours{colour::kSea, colour::kCoral, colour::kSand};
-    // A share of the column's width, not pixels: on a phone as on a screen.
-    return scene::Spec{.width = 0.1f + 0.9f * wave, .relativeSize = scene::axes::kX,
-                       .background = colours[static_cast<std::size_t>(index) % colours.size()]};
+    const float t = static_cast<float>(0.5 + 0.5 * std::sin(c.seconds * 1.3));
+    return scene::Spec{.width = 0.34f + 0.66f * t, .relativeSize = scene::axes::kX, .autoSize = scene::axes::kY,
+                       .padding = scene::Margin::all(18.0f), .cornerRadius = 12.0f, .background = mix(colour::kSea, colour::kCoral, t)};
   }
 };
-auto bar(int i) { return spec_for<Clock>(BarLook{i}, Box<>(scene::Spec{.height = 14.0f, .cornerRadius = 7.0f})); }
-template <std::size_t... I> auto bars(std::index_sequence<I...>) {
-  return column(vbox(8.0f, {.fillX = true, .autoSize = scene::axes::kY}), bar(static_cast<int>(I))...);
+inline constexpr std::string_view kLorem =
+    "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna "
+    "aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. "
+    "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.";
+auto breathing() {
+  return column(vbox(0.0f, {.fillX = true, .autoSize = scene::axes::kY}),
+                spec_for<Clock>(BreathingLook{}, column(vbox(0.0f, {}), words(std::string(kLorem), 18.0f, colour::kFoam))));
 }
 
 auto motion() {
   return SKIFF_NAMED(Motion, section("motion", colour::kInk, title("Fast enough to move every frame", 44.0f, colour::kSand),
-                 sides(side(words("Each bar is a node, its width read from the model's clock. Every frame the clock moves, the binding walks to the "
-                                  "bars that read it, and the page writes only the widths that changed.",
+                 sides(side(words("The box's width and colour are read from the model's clock. Every frame the clock moves, the binding "
+                                  "walks to the one node that reads it, and the page writes its width and colour -- the browser wraps the "
+                                  "words again.",
                                   18.0f, colour::kPaper),
-                            words("Natively the same holds for the scene: what moved is damaged and repainted, the rest kept as it was drawn.", 18.0f,
-                                  colour::kPaper)),
-                       side(bars(std::make_index_sequence<12>{})))));
+                            words("Natively the same holds for the scene: the box is laid out again, its words wrapped anew, and only "
+                                  "what moved is repainted.",
+                                  18.0f, colour::kPaper)),
+                       side(breathing()))));
 }
 
 // Shown while the backend chosen is this one. A type of its own rather than
