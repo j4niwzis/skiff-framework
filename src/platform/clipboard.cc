@@ -101,6 +101,17 @@ inline constexpr std::array kPictureKinds{
 // picture files a file manager copied, where they are.
 class paster {
  public:
+  paster() = default;
+  paster(const paster&) = delete;
+  paster& operator=(const paster&) = delete;
+  // The folder gone with the program: what was pasted was read as it was
+  // given (files_given), and is kept by what took it.
+  ~paster() {
+    if (folder_) {
+      std::error_code failed;
+      std::filesystem::remove_all(*folder_, failed);
+    }
+  }
   [[nodiscard]] std::vector<std::string> pictures() {
     // What SDL was told the clipboard offers (on X11, its owner's answer to
     // TARGETS): said with what went wrong where a picture was among it and
@@ -144,16 +155,19 @@ class paster {
         std::println(std::cerr, "[paste] {} listed, but SDL gave nothing for it: {}", kind.mime, sdl::SDL_GetError());
       return std::nullopt;
     }
-    std::error_code failed;
-    const std::filesystem::path folder = std::filesystem::temp_directory_path(failed) / "mux-pasted";
-    std::filesystem::create_directories(folder, failed);
-    const std::filesystem::path path = folder / std::format("pasted-{}.{}", ++counter_, kind.extension);
+    const std::filesystem::path* folder = this->folder();
+    if (!folder) {
+      sdl::SDL_free(data);
+      std::println(std::cerr, "[paste] no folder of its own for what is pasted could be made in the temporary folder");
+      return std::nullopt;
+    }
+    const std::filesystem::path path = *folder / std::format("pasted-{}.{}", ++counter_, kind.extension);
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
     sdl::SDL_free(data);
     if (!out) {
       std::println(std::cerr, "[paste] {} bytes of {} not written to {}: {}", size, kind.mime, path.string(),
-                   failed ? failed.message() : std::string("the file did not open"));
+                   out.rdbuf()->is_open() ? "the write failed" : "the file did not open");
       return std::nullopt;
     }
     return path.string();
@@ -181,6 +195,30 @@ class paster {
            }) | std::views::transform([](const std::optional<std::string>& path) { return *path; }) | std::ranges::to<std::vector>();
   }
 
+  // A folder of this program's own, made new under the temporary one: a
+  // shared /tmp/mux-pasted could be another's -- left by another user, or
+  // another run under another account -- and nothing could be written into
+  // it (the user's: "810463 bytes of image/png not written to
+  // /tmp/mux-pasted/pasted-1.png"). Made the first time a picture is pasted;
+  // its name drawn at random until one is new.
+  const std::filesystem::path* folder() {
+    if (folder_)
+      return &*folder_;
+    std::error_code failed;
+    const std::filesystem::path under = std::filesystem::temp_directory_path(failed);
+    if (failed)
+      return nullptr;
+    std::random_device seed;
+    for (int tries = 0; tries < 8; ++tries)
+      if (std::filesystem::path made = under / std::format("mux-pasted-{:08x}", seed());
+          std::filesystem::create_directory(made, failed)) {
+        folder_ = std::move(made);
+        return &*folder_;
+      }
+    return nullptr;
+  }
+
+  std::optional<std::filesystem::path> folder_;
   unsigned counter_ = 0;
 };
 
