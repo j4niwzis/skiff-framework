@@ -118,6 +118,23 @@ jobs:
           echo "$std"
           test "$(echo "$std" | wc -l)" = 1
 
+      # A frontend's build: the framework without its canvas, so without
+      # skiff's scene -- the page alone, with a canvas of its own in it
+      # (test/page.cc), written out and read. Checked, not served.
+      - name: a page alone, without the canvas, natively
+        run: |
+          cmake -S . -B build/page -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-23 \
+            -DCMAKE_CXX_COMPILER=clang++-23 \
+            -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" \
+            -DCMAKE_CXX_STDLIB_MODULES_JSON=/tmp/libstdc++.modules.json \
+            -DSKIFF_FRAMEWORK_CANVAS=OFF -DSKIFF_FRAMEWORK_SSR=OFF \
+            -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
+          grep -q "^SKIFF_UI:BOOL=OFF" build/page/CMakeCache.txt
+          cmake --build build/page --target skiff_framework_page_test -- -k 0
+          (cd build/page && ctest -R page --output-on-failure)
+
       - name: the program that writes it out, natively
         run: |
           cmake -S . -B build/native -G Ninja \
@@ -130,6 +147,8 @@ jobs:
           cmake --build build/native --target site -- -k 0
           cmake --build build/native --target skiff_framework_state_test -- -k 0
           build/native/skiff_framework_state_test
+          cmake --build build/native --target skiff_framework_page_test -- -k 0
+          (cd build/native && ctest -R page --output-on-failure)
           std=$(grep -oE 'cmake_cxx_std[^/ ]*\.dir' build/native/build.ninja | sort -u)
           echo "$std"
           test "$(echo "$std" | wc -l)" = 1

@@ -27,13 +27,82 @@ project(skiff_framework VERSION 0.1.0 LANGUAGES CXX)
 # window (skiff.platform.window, below). A program that only wants the
 # window -- mux -- says SKIFF_FRAMEWORK_APP OFF, and nothing of skiff.app's
 # own (skiff.ui, the page) is asked for.
+# The native window: skiff's scene in a window of the system's (SDL3), drawn
+# by Skia -- on the GPU through GL where there is a GL, in software into the
+# window's own pixels where there is not -- with the system's input, dialogs
+# and clipboard. skiff.platform.window (src/platform/), for the platforms that
+# have one.
+#
+# Each platform is a cmake-everywhere platform feature: on for the platform a
+# build is for, never asked for and never refused, and naming what that
+# platform needs and nothing else -- a build for Android brings the window's
+# Android pieces and SDL, one for the browser none of it. A platform not
+# among them gets no window: skiff.app alone (the page, or the page written
+# out).
+set(skiff_framework_window_platforms linux windows macos android)
+if(COMMAND cme_port_feature)
+  foreach(platform IN LISTS skiff_framework_window_platforms)
+    cme_port_feature(skiff-framework ${platform} SUMMARY "skiff.platform.window: a window of the system's, through SDL3" DEPENDS sdl3)
+  endforeach()
+  cme_port_feature(skiff-framework wasm SUMMARY "skiff.app on the page, and on a canvas")
+endif()
+if(COMMAND cme_platform_features)
+  cme_platform_features(skiff_framework_platform)
+elseif(ANDROID)
+  set(skiff_framework_platform android)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  set(skiff_framework_platform wasm)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(skiff_framework_platform linux)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  set(skiff_framework_platform macos)
+elseif(WIN32)
+  set(skiff_framework_platform windows)
+else()
+  string(TOLOWER "${CMAKE_SYSTEM_NAME}" skiff_framework_platform)
+endif()
+# On for a program that takes the framework (mux); off for the framework's own
+# build (the site), which writes a page and needs no window -- nor SDL, nor Skia.
+set(skiff_framework_window_default ON)
+if(PROJECT_IS_TOP_LEVEL)
+  set(skiff_framework_window_default OFF)
+endif()
+option(SKIFF_FRAMEWORK_WINDOW "skiff.platform.window, where this build's platform has one" ${skiff_framework_window_default})
+set(skiff_framework_has_window OFF)
+if(SKIFF_FRAMEWORK_WINDOW AND skiff_framework_platform IN_LIST skiff_framework_window_platforms)
+  set(skiff_framework_has_window ON)
+endif()
+
 option(SKIFF_FRAMEWORK_APP "skiff.app: the page, and the page written out" ON)
 
 if(SKIFF_FRAMEWORK_APP)
+  # The canvas -- the whole tree drawn by skiff's scene instead of the page's
+  # elements (skiff.app.canvas) -- is a feature: a frontend has no need of
+  # one, and without it skiff's scene is not built at all (but where the
+  # window needs it). Asked for as the feature (COMPONENTS canvas), or by
+  # hand (SKIFF_FRAMEWORK_CANVAS); the framework's own build (the site) has it.
+  if(COMMAND cme_port_feature)
+    cme_port_feature(skiff-framework canvas SUMMARY "skiff.app.canvas: the tree drawn by skiff's scene on a canvas, instead of the page")
+  endif()
+  set(skiff_framework_canvas_default ${PROJECT_IS_TOP_LEVEL})
+  if(DEFINED CME_FEATURES_skiff-framework AND "canvas" IN_LIST CME_FEATURES_skiff-framework)
+    set(skiff_framework_canvas_default ON)
+  endif()
+  option(SKIFF_FRAMEWORK_CANVAS "skiff.app with the canvas: the tree drawn by skiff's scene, where the program says so" ${skiff_framework_canvas_default})
+  if(SKIFF_FRAMEWORK_CANVAS)
+    set(skiff_framework_canvas ${CMAKE_CURRENT_SOURCE_DIR}/src/canvas.cc)
+  else()
+    set(skiff_framework_canvas ${CMAKE_CURRENT_SOURCE_DIR}/src/canvas_off.cc)
+  endif()
   if(NOT TARGET skiff::ui)
-    # Both backends, for skiff.ui to mount on: the page, and the scene --
-    # without Skia, by default: in a browser its stand-in draws on a canvas.
-    set(SKIFF_UI ON CACHE BOOL "" FORCE)
+    # The backends skiff.ui mounts on: the page, and the scene where there is
+    # a canvas or a window -- without Skia, by default: in a browser its
+    # stand-in draws on the canvas.
+    if(SKIFF_FRAMEWORK_CANVAS OR skiff_framework_has_window)
+      set(SKIFF_UI ON CACHE BOOL "" FORCE)
+    else()
+      set(SKIFF_UI OFF CACHE BOOL "" FORCE)
+    endif()
     set(SKIFF_WEB ON CACHE BOOL "" FORCE)
     # Skia where a program asks for it (-DSKIFF_SKIA=ON): writing a page out
     # needs none.
@@ -52,7 +121,7 @@ if(SKIFF_FRAMEWORK_APP)
       NAME skiff-widgets
       PROVIDES skiff-widgets skiff_widgets
       GITHUB_REPOSITORY j4niwzis/skiff-widgets
-      GIT_TAG 97a7613bff8c023c55f84d369dbe83fc95412ad8
+      GIT_TAG ddb02cf49737b488a8f520761a46c41947c7ef58
       VERSION 0.1.0
     )
   endif()
@@ -97,7 +166,7 @@ if(SKIFF_FRAMEWORK_APP)
 
   add_library(skiff_framework STATIC)
   add_library(skiff::framework ALIAS skiff_framework)
-  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${skiff_framework_carry})
+  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${skiff_framework_carry} ${skiff_framework_canvas})
   target_include_directories(skiff_framework PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
   set_target_properties(skiff_framework PROPERTIES EXPORT_NAME framework CXX_STANDARD 26)
   target_compile_features(skiff_framework PUBLIC cxx_std_26)
@@ -107,49 +176,22 @@ if(SKIFF_FRAMEWORK_APP)
   endif()
 endif()
 
-# The native window: skiff's scene in a window of the system's (SDL3), drawn
-# by Skia -- on the GPU through GL where there is a GL, in software into the
-# window's own pixels where there is not -- with the system's input, dialogs
-# and clipboard. skiff.platform.window (src/platform/), for the platforms that
-# have one.
-#
-# Each platform is a cmake-everywhere platform feature: on for the platform a
-# build is for, never asked for and never refused, and naming what that
-# platform needs and nothing else -- a build for Android brings the window's
-# Android pieces and SDL, one for the browser none of it. A platform not
-# among them gets no window: skiff.app alone (the page, or the page written
-# out).
-set(skiff_framework_window_platforms linux windows macos android)
-if(COMMAND cme_port_feature)
-  foreach(platform IN LISTS skiff_framework_window_platforms)
-    cme_port_feature(skiff-framework ${platform} SUMMARY "skiff.platform.window: a window of the system's, through SDL3" DEPENDS sdl3)
-  endforeach()
-  cme_port_feature(skiff-framework wasm SUMMARY "skiff.app on the page, and on a canvas")
-endif()
-if(COMMAND cme_platform_features)
-  cme_platform_features(skiff_framework_platform)
-elseif(ANDROID)
-  set(skiff_framework_platform android)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
-  set(skiff_framework_platform wasm)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  set(skiff_framework_platform linux)
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-  set(skiff_framework_platform macos)
-elseif(WIN32)
-  set(skiff_framework_platform windows)
-else()
-  string(TOLOWER "${CMAKE_SYSTEM_NAME}" skiff_framework_platform)
-endif()
-# On for a program that takes the framework (mux); off for the framework's own
-# build (the site), which writes a page and needs no window -- nor SDL, nor Skia.
-set(skiff_framework_window_default ON)
-if(PROJECT_IS_TOP_LEVEL)
-  set(skiff_framework_window_default OFF)
-endif()
-option(SKIFF_FRAMEWORK_WINDOW "skiff.platform.window, where this build's platform has one" ${skiff_framework_window_default})
-if(SKIFF_FRAMEWORK_WINDOW AND skiff_framework_platform IN_LIST skiff_framework_window_platforms)
+if(skiff_framework_has_window)
   find_package(SDL3 REQUIRED)
+  # chevron: the clipboard writes what it offers as HTML with its escaping
+  # (chevron.escape). The program's where it has it (mux), else asked for.
+  if(NOT TARGET chevron)
+    if(COMMAND cme_declare_port)
+      cme_declare_port(NAME chevron PROVIDES chevron
+        GITHUB_REPOSITORY j4niwzis/chevron
+        GIT_TAG 8f40c545f0120747b3bf2ad6a61b420505e1249b
+        VERSION 0.2
+        LICENSE AGPL-3.0-only
+        TARGETS chevron)
+      cme_options(chevron "CHEVRON_TESTS OFF")
+    endif()
+    find_package(chevron 0.2 REQUIRED)
+  endif()
   # skiff's scene with Skia, and skiff-widgets: the program's where it has
   # them (mux), else asked for here.
   if(NOT TARGET skiff::widgets)
@@ -159,7 +201,7 @@ if(SKIFF_FRAMEWORK_WINDOW AND skiff_framework_platform IN_LIST skiff_framework_w
         NAME skiff-widgets
         PROVIDES skiff-widgets skiff_widgets
         GITHUB_REPOSITORY j4niwzis/skiff-widgets
-        GIT_TAG 97a7613bff8c023c55f84d369dbe83fc95412ad8
+        GIT_TAG ddb02cf49737b488a8f520761a46c41947c7ef58
         VERSION 0.1.0
       )
     endif()
@@ -199,7 +241,7 @@ if(SKIFF_FRAMEWORK_WINDOW AND skiff_framework_platform IN_LIST skiff_framework_w
   target_sources(skiff_framework_window PUBLIC FILE_SET CXX_MODULES FILES ${skiff_framework_platform_sources})
   set_target_properties(skiff_framework_window PROPERTIES EXPORT_NAME window CXX_STANDARD 26)
   target_compile_features(skiff_framework_window PUBLIC cxx_std_26)
-  target_link_libraries(skiff_framework_window PUBLIC SDL3::SDL3 skiff::skiff skiff::widgets splice)
+  target_link_libraries(skiff_framework_window PUBLIC SDL3::SDL3 skiff::skiff skiff::widgets splice chevron)
   message(STATUS "skiff-framework: the window, for ${skiff_framework_platform}")
 endif()
 
@@ -214,9 +256,15 @@ function(skiff_app target)
   set_target_properties(${target} PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
   if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     set_target_properties(${target} PROPERTIES OUTPUT_NAME index SUFFIX .html)
+    # What the page's JavaScript calls: its events, and the canvas's where
+    # there is one.
+    set(exported _main,_skiff_web_event)
+    if(SKIFF_FRAMEWORK_CANVAS)
+      string(APPEND exported ,_skiff_canvas_pointer,_skiff_canvas_key,_skiff_canvas_text)
+    endif()
     target_link_options(${target} PRIVATE -fexceptions
       -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=ccall
-      -sEXPORTED_FUNCTIONS=_main,_skiff_web_event,_skiff_canvas_pointer,_skiff_canvas_key,_skiff_canvas_text
+      -sEXPORTED_FUNCTIONS=${exported}
       -sSTACK_SIZE=4194304)
     if(APP_SHELL)
       target_link_options(${target} PRIVATE --shell-file ${APP_SHELL})
@@ -234,8 +282,19 @@ if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND SKIFF_FRAMEWORK_SSR AND NOT 
   add_test(NAME state COMMAND skiff_framework_state_test)
 endif()
 
+# A page alone (test/page.cc): words and a canvas of the page's own, with or
+# without the canvas feature -- what a frontend builds.
+if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  enable_testing()
+  add_executable(skiff_framework_page_test test/page.cc)
+  skiff_app(skiff_framework_page_test)
+  add_test(NAME page COMMAND skiff_framework_page_test)
+  set_tests_properties(page PROPERTIES PASS_REGULAR_EXPRESSION "A page, and a canvas in it.*<canvas class=\"skiff-canvas\"")
+endif()
+
 option(SKIFF_FRAMEWORK_SITE "Build skiff's site, a program of skiff.app" ${PROJECT_IS_TOP_LEVEL})
-if(NOT SKIFF_FRAMEWORK_APP)
+# The site is a canvas's too (its scene tab): built where there is one.
+if(NOT SKIFF_FRAMEWORK_APP OR NOT SKIFF_FRAMEWORK_CANVAS)
   set(SKIFF_FRAMEWORK_SITE OFF)
 endif()
 if(SKIFF_FRAMEWORK_SITE)

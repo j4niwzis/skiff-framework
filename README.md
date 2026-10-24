@@ -70,6 +70,16 @@ every part of it is something knot reads and writes (a type described with
 `json_schema`, a string, a bool, an integer, an optional, a vector or a map of
 them). In the page Emscripten makes, `@@SKIFF-STATE@@` says where it goes.
 
+## With or without the canvas
+
+A page is the browser's own elements. Drawing the whole tree with skiff's
+scene on a canvas instead -- what the site does on its "scene" tab -- is a
+feature, `canvas` (`cme_find_package(skiff-framework COMPONENTS canvas)`, or
+`-DSKIFF_FRAMEWORK_CANVAS=ON`): `skiff.app.canvas`, shown where the program's
+`onCanvas` says so, cleared to its `paper`. Without it, a frontend gets the
+page alone: no canvas and none of its JavaScript, and skiff's scene and nodes
+are not compiled at all (unless the native window needs them).
+
 ## The window
 
 `skiff.platform.window` (`src/platform/`): skiff's scene in a window of the
