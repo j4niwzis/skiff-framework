@@ -142,6 +142,16 @@ Paths are the app's own, relative to where it is served (no leading slash; `""` 
 - **In a browser,** the address bar follows the part (the History API), and the part follows the address bar: back and forward, and a click on a link to one of the program's routes, which the program takes over from the browser.
 - **Served,** the path a request asks for is the route its session starts on. A link is a request of its own, so routing works with no script.
 
+## Timers and storage
+
+Time is a part of the model too (`skiff.app.timer`):
+- `timer::Every<Tag>` (on, how often, a count of how many times it has gone off);
+- `timer::After<Tag>` (asked for, how long, done).
+
+Handlers start, stop or ask for them with edits (`timer::start<Tag>(1s)`, `timer::stop<Tag>()`, `timer::after<Tag>(500ms)`). The framework edits the part when its time comes, so a view bound to it moves. A page looked at late counts every time it should have gone off, in one edit. Nothing loops for it: in a browser one timer is set for the soonest; served, the session's loop wakes for it.
+
+Storage (`store`, a feature; `skiff.app.store`): a part `store::Kept<T>`, where `T` says its `key` and knot reads and writes it, is kept in the browser's `localStorage`. It is read back as the program starts and written again as it changes.
+
 ## The window
 
 `skiff.platform.window` (`src/platform/`): skiff's scene in a window of the

@@ -32,6 +32,7 @@ import skiff.ui;
 import skiff.app.net;
 import skiff.app.net.native;
 import skiff.app.route;
+import skiff.app.timer;
 
 namespace skiff::app::serve {
 
@@ -88,6 +89,8 @@ template <class A> struct Session {
   asio::steady_timer wake;
   // What its model asks of the network (skiff.app.net), asked from here.
   skiff::app::net::Runner<typename A::Model, skiff::app::net::native> runner;
+  // Its timers (skiff.app.timer): gone off as the loop wakes for them.
+  skiff::app::timer::Ticker<typename A::Model> ticker;
   explicit Session(asio::any_io_executor ex) : wake(ex, asio::steady_timer::time_point::max()), runner(skiff::app::net::native(ex)) {
     runner.transport().wakes(&wake);
   }
@@ -133,14 +136,20 @@ template <class A> struct Server {
         co_await asio::async_write(socket.socket(), http::make_chunk(asio::buffer(piece)), asio::redirect_error(asio::use_awaitable, ec));
         if (ec) break;
       }
+      session.ticker.step(session.model);
       session.runner.step(session.model);
       piece = session.page->update();
       if (!piece.empty()) continue;
       // Nothing to send: waited for -- a post, an answer, a request to try
-      // again (looked at often while one waits), or the heartbeat.
-      session.wake.expires_after(session.runner.busy() ? std::chrono::milliseconds(100) : std::chrono::milliseconds(kHeartbeat));
+      // again (looked at often while one waits), a timer, or the heartbeat.
+      auto wait = session.runner.busy() ? std::chrono::milliseconds(100) : std::chrono::milliseconds(kHeartbeat);
+      if (const auto due = session.ticker.next())
+        wait = std::clamp(std::chrono::duration_cast<std::chrono::milliseconds>(*due - std::chrono::steady_clock::now()),
+                          std::chrono::milliseconds(1), wait);
+      session.wake.expires_after(wait);
       beast::error_code woken;
       co_await session.wake.async_wait(asio::redirect_error(asio::use_awaitable, woken));
+      session.ticker.step(session.model);
       session.runner.step(session.model);
       piece = session.page->update();
       if (piece.empty() && !woken && !session.runner.busy()) piece = std::string(skiff::web::live::kHeartbeat);

@@ -59,6 +59,8 @@ import skiff.app.canvas;
 import skiff.app.serve;
 import skiff.app.net;
 import skiff.app.route;
+import skiff.app.timer;
+import skiff.app.store;
 
 #ifdef __EMSCRIPTEN__
 // ---- the page's side, in JavaScript ---------------------------------------
@@ -338,10 +340,30 @@ template <auto View, class Hooks = NoHooks> struct App {
   }
   // When the soonest request waiting to be tried again is: the program's
   // own, or one of its loopback sessions'.
+  // The program's timers (skiff.app.timer), and its parts kept in the
+  // browser's storage (skiff.app.store).
+  static skiff::app::timer::Ticker<Model> &ticker() {
+    static skiff::app::timer::Ticker<Model> kept;
+    return kept;
+  }
+  static skiff::app::store::Keeper<Model> &keeper() {
+    static skiff::app::store::Keeper<Model> kept;
+    return kept;
+  }
+  // When to be woken next: the soonest of a request to try again and a
+  // timer to go off -- the program's own, or one of its loopback sessions'.
   static std::optional<std::chrono::steady_clock::time_point> soonest() {
-    std::optional<std::chrono::steady_clock::time_point> next = runner().next();
-    for (const auto &[id, one] : loopbacks())
-      if (const auto theirs = one->runner.next(); theirs && (!next || *theirs < *next)) next = theirs;
+    using Time = std::optional<std::chrono::steady_clock::time_point>;
+    Time next;
+    const auto take = [&](Time one) {
+      if (one && (!next || *one < *next)) next = one;
+    };
+    take(runner().next());
+    take(ticker().next());
+    for (const auto &[id, one] : loopbacks()) {
+      take(one->runner.next());
+      take(one->ticker.next());
+    }
     return next;
   }
   // Where the program is (skiff.app.route), kept one with the address bar.
@@ -365,7 +387,9 @@ template <auto View, class Hooks = NoHooks> struct App {
         if (one.element() != skiff::web::dom::kNone) one.client().refresh();
       });
     } else if (page()) {
+      ticker().step(model());
       runner().step(model());
+      keeper().save(model());
       bool onCanvas = false;
       if constexpr (requires { hooks().onCanvas(std::as_const(model())); })
         onCanvas = hooks().onCanvas(std::as_const(model()));
@@ -384,7 +408,9 @@ template <auto View, class Hooks = NoHooks> struct App {
     const double now = emscripten_get_now();
     if constexpr (kFrames)
       hooks().frame(model(), (now - startedAt()) / 1000.0);
+    ticker().step(model());
     runner().step(model());
+    keeper().save(model());
     bool onCanvas = false;
     if constexpr (requires { hooks().onCanvas(std::as_const(model())); })
       onCanvas = hooks().onCanvas(std::as_const(model()));
@@ -442,8 +468,9 @@ template <auto View, class Hooks = NoHooks> struct App {
   struct Loopback {
     Model model;
     std::optional<skiff::web::Live<PageTree, Model>> page;
-    // What its model asks of the network, asked by the browser's fetch.
+    // What its model asks of the network, asked by the browser's fetch; its timers.
     skiff::app::net::Runner<Model, skiff::app::net::browser> runner{skiff::app::net::browser{}};
+    skiff::app::timer::Ticker<Model> ticker;
   };
   static std::map<int, std::unique_ptr<Loopback>> &loopbacks() {
     static std::map<int, std::unique_ptr<Loopback>> kept;
@@ -490,6 +517,7 @@ template <auto View, class Hooks = NoHooks> struct App {
   static char *loopbackNext(int id) {
     Loopback *one = loopback(id);
     if (!one) return nullptr;
+    one->ticker.step(one->model);
     one->runner.step(one->model);
     return handedOut(one->page->update());
   }
@@ -514,6 +542,8 @@ template <auto View, class Hooks = NoHooks> struct App {
         if (const auto first = router().moved(model())) skiffAppPush(first->c_str(), 1);
     }
     skiffAppRouting();
+    // What the program kept in the browser's storage, back.
+    keeper().restore(model());
     const skiff::web::dom::Handle root = skiff::web::dom::root();
     if (skiff::web::dom::children(root) > sheets()) {
       page().emplace(skiff::ui::mount(skiff::ui::onPage, View()), model());

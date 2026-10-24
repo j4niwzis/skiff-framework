@@ -135,6 +135,22 @@ if(SKIFF_FRAMEWORK_APP)
     set(skiff_framework_net ${CMAKE_CURRENT_SOURCE_DIR}/src/net_off.cc)
   endif()
 
+  # Storage -- parts of the model kept in the browser (skiff.app.store),
+  # through knot -- is a feature as well; the framework's own build has it.
+  if(COMMAND cme_port_feature)
+    cme_port_feature(skiff-framework store SUMMARY "skiff.app.store: parts of the model kept in the browser's storage" DEPENDS knot)
+  endif()
+  set(skiff_framework_store_default ${PROJECT_IS_TOP_LEVEL})
+  if(DEFINED CME_FEATURES_skiff-framework AND "store" IN_LIST CME_FEATURES_skiff-framework)
+    set(skiff_framework_store_default ON)
+  endif()
+  option(SKIFF_FRAMEWORK_STORE "skiff.app.store: parts of the model kept in the browser's storage" ${skiff_framework_store_default})
+  if(SKIFF_FRAMEWORK_STORE)
+    set(skiff_framework_store ${CMAKE_CURRENT_SOURCE_DIR}/src/store.cc)
+  else()
+    set(skiff_framework_store ${CMAKE_CURRENT_SOURCE_DIR}/src/store_off.cc)
+  endif()
+
   # Live -- the page served by the program itself, the tree and a model for
   # each browser kept on the server and the page a stream appended to as it
   # moves (skiff.app.serve) -- is a feature too: it needs Boost (Asio, Beast)
@@ -204,7 +220,7 @@ if(SKIFF_FRAMEWORK_APP)
     set(skiff_framework_ssr_default ON)
   endif()
   option(SKIFF_FRAMEWORK_SSR "skiff.app with server-side rendering: the model written into the page, through knot" ${skiff_framework_ssr_default})
-  if(SKIFF_FRAMEWORK_SSR OR SKIFF_FRAMEWORK_NET)
+  if(SKIFF_FRAMEWORK_SSR OR SKIFF_FRAMEWORK_NET OR SKIFF_FRAMEWORK_STORE)
     if(COMMAND cme_declare_port AND NOT TARGET knot)
       cme_declare_port(NAME knot PROVIDES knot
         GITHUB_REPOSITORY j4niwzis/knot
@@ -230,12 +246,12 @@ if(SKIFF_FRAMEWORK_APP)
 
   add_library(skiff_framework STATIC)
   add_library(skiff::framework ALIAS skiff_framework)
-  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/route.cc ${skiff_framework_carry} ${skiff_framework_canvas} ${skiff_framework_net} ${skiff_framework_serve})
+  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/route.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/timer.cc ${skiff_framework_store} ${skiff_framework_carry} ${skiff_framework_canvas} ${skiff_framework_net} ${skiff_framework_serve})
   target_include_directories(skiff_framework PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
   set_target_properties(skiff_framework PROPERTIES EXPORT_NAME framework CXX_STANDARD 26)
   target_compile_features(skiff_framework PUBLIC cxx_std_26)
   target_link_libraries(skiff_framework PUBLIC skiff::ui)
-  if(SKIFF_FRAMEWORK_SSR OR SKIFF_FRAMEWORK_NET)
+  if(SKIFF_FRAMEWORK_SSR OR SKIFF_FRAMEWORK_NET OR SKIFF_FRAMEWORK_STORE)
     target_link_libraries(skiff_framework PUBLIC knot)
   endif()
   if(skiff_framework_net_secured)
@@ -359,6 +375,10 @@ if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND NOT CMAKE_SYSTEM_NAME STREQU
   set_target_properties(skiff_framework_route_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
   target_link_libraries(skiff_framework_route_test PRIVATE skiff::framework)
   add_test(NAME route COMMAND skiff_framework_route_test)
+  add_executable(skiff_framework_timer_test test/timer.cc)
+  set_target_properties(skiff_framework_timer_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
+  target_link_libraries(skiff_framework_timer_test PRIVATE skiff::framework)
+  add_test(NAME timer COMMAND skiff_framework_timer_test)
 endif()
 
 # The network's runner, with a transport of the test's own (test/net.cc).
