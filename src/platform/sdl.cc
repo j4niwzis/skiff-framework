@@ -81,6 +81,7 @@ using ::SDL_GetClipboardText;
 using ::SDL_GetCurrentVideoDriver;
 using ::SDL_GetDisplayUsableBounds;
 using ::SDL_GetError;
+using ::SDL_ClearError;
 using ::SDL_GetPrimaryDisplay;
 using ::SDL_GetTicksNS;
 using ::SDL_GetTouchDevices;

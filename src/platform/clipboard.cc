@@ -108,9 +108,14 @@ class paster {
     // HasClipboardData is a whole GetClipboardData, thrown away -- each
     // transfer one more chance for an owner's answer to time out.
     // A picture itself, in one of the kinds read here.
+    // What SDL said as a fetch failed: on X11, "Selection timeout" where
+    // the owner took more than a second to answer -- and SDL then took the
+    // clipboard over itself.
+    sdl::SDL_ClearError();
     for (const picture_kind& kind : kPictureKinds)
       if (auto made = this->picture_of(kind))
         return {std::move(*made)};
+    const std::string failed = sdl::SDL_GetError();
     // Files a file manager copied: those that are pictures.
     if (std::vector<std::string> files = this->uris(); !files.empty())
       return files;
@@ -124,8 +129,8 @@ class paster {
     // offers (on X11, its owner's answer to TARGETS), or that it was told
     // nothing.
     if (std::ranges::none_of(mimes, [](const std::string& one) { return one.starts_with("text/") || one.ends_with("STRING"); }))
-      std::println(std::cerr, "[paste] nothing on the clipboard read as a picture; it offers: {}{}", mimes,
-                   mimes.empty() ? " (SDL was told of nothing)" : "");
+      std::println(std::cerr, "[paste] nothing on the clipboard read as a picture; it offers: {}{}{}{}", mimes,
+                   mimes.empty() ? " (SDL was told of nothing)" : "", failed.empty() ? "" : "; SDL said: ", failed);
     return {};
   }
 
