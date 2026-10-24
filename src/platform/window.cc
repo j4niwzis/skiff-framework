@@ -51,6 +51,14 @@ template <class App>
   requires requires(const App& app) { { app.interface_scale() } -> std::convertible_to<int>; }
 int interface_scale(const App& app) { return app.interface_scale(); }
 // Whether the program is pointed at with a finger now, told as it changes.
+// Whether the window is shaped as a phone's, for a long press to be its
+// right press: narrow and taller than wide, unless the program says
+// otherwise -- a layout held to portrait or landscape (mux's Settings).
+template <class App>
+bool phone_shaped(const App&, float width, float height) { return width < 600.0f && height > width; }
+template <class App>
+  requires requires(const App& app, float side) { { app.phone_shaped(side, side) } -> std::convertible_to<bool>; }
+bool phone_shaped(const App& app, float width, float height) { return app.phone_shaped(width, height); }
 template <class App>
 void touch_changed(App&, bool) {}
 template <class App>
@@ -546,7 +554,7 @@ int run(App& app, const options& how, const events::kinds& kinds) {
             // where it went down, and a selection held was gone before its
             // menu came (the user, #13637).
             if (event.button.button == sdl::kButtonLeft &&
-                (event.button.which == sdl::kTouchMouseid || (last_width < 600.0f && last_height > last_width))) {
+                (event.button.which == sdl::kTouchMouseid || hooks::phone_shaped(app, last_width, last_height))) {
               held = held_t{event.button.x * to_scene, event.button.y * to_scene, detail::now_ms(), false};
               break;
             }
