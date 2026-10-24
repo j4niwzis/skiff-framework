@@ -59,15 +59,33 @@ if(SKIFF_FRAMEWORK_APP)
   if(NOT TARGET skiff::ui)
     find_package(skiff-widgets 0.1.0 REQUIRED)
   endif()
-  # knot: the model written into the page as JSON, and read back.
-  if(COMMAND cme_declare_port AND NOT TARGET knot)
-    cme_declare_port(NAME knot PROVIDES knot
-      GITHUB_REPOSITORY j4niwzis/knot
-      GIT_TAG 56858a4b579584a85b488db99ef10687a97702d5
-      LICENSE AGPL-3.0-only)
+  # SSR -- the page written out with the model it was written with, read
+  # back in the browser (skiff.app.carry), and what is to come of it -- is a
+  # feature: a program that is a page in the browser alone (a frontend, no
+  # server, nothing written out) asks for none of it, and needs nothing of
+  # knot. Asked for as the feature (COMPONENTS ssr), or by hand
+  # (SKIFF_FRAMEWORK_SSR); the framework's own build (the site) has it.
+  if(COMMAND cme_port_feature)
+    cme_port_feature(skiff-framework ssr SUMMARY "server-side rendering: the model travels with the page, through knot" DEPENDS knot)
   endif()
-  if(NOT TARGET knot)
-    find_package(knot REQUIRED)
+  set(skiff_framework_ssr_default ${PROJECT_IS_TOP_LEVEL})
+  if(DEFINED CME_FEATURES_skiff-framework AND "ssr" IN_LIST CME_FEATURES_skiff-framework)
+    set(skiff_framework_ssr_default ON)
+  endif()
+  option(SKIFF_FRAMEWORK_SSR "skiff.app with server-side rendering: the model written into the page, through knot" ${skiff_framework_ssr_default})
+  if(SKIFF_FRAMEWORK_SSR)
+    if(COMMAND cme_declare_port AND NOT TARGET knot)
+      cme_declare_port(NAME knot PROVIDES knot
+        GITHUB_REPOSITORY j4niwzis/knot
+        GIT_TAG 56858a4b579584a85b488db99ef10687a97702d5
+        LICENSE AGPL-3.0-only)
+    endif()
+    if(NOT TARGET knot)
+      find_package(knot REQUIRED)
+    endif()
+    set(skiff_framework_carry ${CMAKE_CURRENT_SOURCE_DIR}/src/carry_ssr.cc)
+  else()
+    set(skiff_framework_carry ${CMAKE_CURRENT_SOURCE_DIR}/src/carry.cc)
   endif()
 
   # Under Emscripten every unit -- the std module CMake makes among them -- is
@@ -79,11 +97,14 @@ if(SKIFF_FRAMEWORK_APP)
 
   add_library(skiff_framework STATIC)
   add_library(skiff::framework ALIAS skiff_framework)
-  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc)
+  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${skiff_framework_carry})
   target_include_directories(skiff_framework PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
   set_target_properties(skiff_framework PROPERTIES EXPORT_NAME framework CXX_STANDARD 26)
   target_compile_features(skiff_framework PUBLIC cxx_std_26)
-  target_link_libraries(skiff_framework PUBLIC skiff::ui knot)
+  target_link_libraries(skiff_framework PUBLIC skiff::ui)
+  if(SKIFF_FRAMEWORK_SSR)
+    target_link_libraries(skiff_framework PUBLIC knot)
+  endif()
 endif()
 
 # The native window: skiff's scene in a window of the system's (SDL3), drawn
@@ -204,7 +225,7 @@ function(skiff_app target)
 endfunction()
 
 # The framework's own checks, natively: the state a page carries.
-if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND SKIFF_FRAMEWORK_SSR AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   enable_testing()
   add_executable(skiff_framework_state_test test/state.cc)
   set_target_properties(skiff_framework_state_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)

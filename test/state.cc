@@ -1,10 +1,11 @@
-// The state a page carries (skiff.app): a model's parts written as JSON by
+// The state a page carries (skiff.app.carry, with the ssr feature): a model's parts written as JSON by
 // knot into the page's <script>, and read back into the same parts -- the
 // value and its revision, every part in its place; "</" in a value never
 // ending the script.
 import std;
 import knot;
 import skiff.app;
+import skiff.app.carry;
 
 namespace probe {
 struct Counter {
@@ -26,14 +27,14 @@ struct Opaque {
 } // namespace probe
 
 using Root = skiff::model::Assembled<skiff::model::Tracked<probe::Counter>, skiff::model::Tracked<probe::Note>>;
-static_assert(skiff::app::TransferableRoot<Root>);
-static_assert(!skiff::app::TransferableRoot<skiff::model::Assembled<skiff::model::Tracked<probe::Opaque>>>);
+static_assert(skiff::app::carry::TransferableRoot<Root>);
+static_assert(!skiff::app::carry::TransferableRoot<skiff::model::Assembled<skiff::model::Tracked<probe::Opaque>>>);
 
 int main() {
   Root root;
   root.part = {.fValue = {.count = 41}, .fRevision = 3};
   root.rest.part = {.fValue = {.text = "a </script> in it", .tags = {"x", "y"}, .pinned = true}, .fRevision = 7};
-  const std::string script = skiff::app::detail::stateScript(root);
+  const std::string script = skiff::app::carry::script(root);
   std::println("{}", script);
   const std::string_view open = R"(<script type="application/json" id="skiff-state">)";
   if (!script.starts_with(open) || !script.ends_with("</script>")) {

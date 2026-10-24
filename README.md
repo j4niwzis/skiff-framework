@@ -54,6 +54,22 @@ What a program adds is a `Hooks` struct, every member optional -- its theme
 (`outlineRepaints`), its stylesheet, the canvas's paper, a link followed on
 the canvas (`open`), the `<head>` written out. See `src/app.cc`.
 
+## With or without SSR
+
+The framework is a frontend first: in a browser, `skiff.app` makes the page
+itself where nothing was written before it, and a program that is only that
+asks for nothing more -- no server, nothing written out, nothing of knot.
+
+Server-side rendering is a feature, `ssr` (`cme_find_package(skiff-framework
+COMPONENTS ssr)`, or `-DSKIFF_FRAMEWORK_SSR=ON`): the page written out with
+the model it was written with, as JSON through
+[knot](https://github.com/j4niwzis/knot) -- `<script type="application/json"
+id="skiff-state">` -- and read back in the browser into the same model
+before the page is taken over (`skiff.app.carry`). A model travels where
+every part of it is something knot reads and writes (a type described with
+`json_schema`, a string, a bool, an integer, an optional, a vector or a map of
+them). In the page Emscripten makes, `@@SKIFF-STATE@@` says where it goes.
+
 ## The window
 
 `skiff.platform.window` (`src/platform/`): skiff's scene in a window of the
