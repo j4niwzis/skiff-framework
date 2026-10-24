@@ -456,11 +456,15 @@ inline constexpr std::string_view kLorem =
   t.apply({.grow = scene::axes::kX, .alignSelf = scene::align::kMiddle});
   return t;
 }
+// The boxes themselves: the part the browser runs where the page is served.
+auto breathingParts() {
+  return state<Clock>(row(hbox(0.0f, {.fillX = true, .height = 400.0f, .border = scene::Border{colour::kPaper, 2.0f}}),
+             spec_for<Clock>(LeftLook{}, row(hbox(0.0f, {}), lorem())), spec_for<Clock>(RightLook{}, row(hbox(0.0f, {}), lorem()))));
+}
 auto breathing() {
   // The browser's own (a client): served, it moves where it is shown, at
   // the browser's frames -- the server sends nothing for it.
-  return skiff::ui::client(state<Clock>(row(hbox(0.0f, {.fillX = true, .height = 400.0f, .border = scene::Border{colour::kPaper, 2.0f}}),
-             spec_for<Clock>(LeftLook{}, row(hbox(0.0f, {}), lorem())), spec_for<Clock>(RightLook{}, row(hbox(0.0f, {}), lorem())))));
+  return skiff::ui::client(breathingParts());
 }
 
 auto motion() {
@@ -535,6 +539,10 @@ auto footer() {
 }
 
 // The page: what each part keeps and answers is its own (state<T>).
+// The page's parts that are the browser's own, in the page's order: what
+// the client build runs (client.cc, SKIFF_APP_CLIENT).
+auto clients() { return std::tuple{breathingParts()}; }
+
 auto page() {
   return column(vbox(0.0f, {.fillX = true, .autoSize = scene::axes::kY}), header(), hero(), features(), declarative(), binding(), motion(),
                 backends(), footer());
@@ -587,6 +595,8 @@ struct Hooks {
   // the browser's (served).
   // First on a page the site serves itself (the served switch): the way to
   // each of its forms, as links -- no script needed to go back.
+  // The client build (client.js): what a page served with script loads.
+  [[nodiscard]] std::string_view clientScript() const { return "client.js"; }
   [[nodiscard]] std::string servedLead(bool script) const {
     const auto link = [](std::string_view mode, std::string_view label, bool here) {
       return std::format(R"(<a href="../?mode={}" style="color:#fff;{}">{}</a>)", mode, here ? "font-weight:700" : "opacity:.8", label);

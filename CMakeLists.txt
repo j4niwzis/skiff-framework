@@ -359,6 +359,21 @@ function(skiff_app target)
   endif()
 endfunction()
 
+# skiff_app_client(target): the program built for a page served live -- its
+# parts that are the browser's own alone (SKIFF_APP_CLIENT): client.js and
+# client.wasm under Emscripten; nothing natively.
+function(skiff_app_client target)
+  target_link_libraries(${target} PRIVATE skiff::framework)
+  set_target_properties(${target} PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    set_target_properties(${target} PROPERTIES OUTPUT_NAME client SUFFIX .js)
+    target_link_options(${target} PRIVATE -fexceptions
+      -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=ccall,UTF8ToString
+      -sEXPORTED_FUNCTIONS=_main,_skiff_web_event,_skiff_app_wake
+      -sSTACK_SIZE=1048576)
+  endif()
+endfunction()
+
 # The framework's own checks, natively: the state a page carries.
 if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND SKIFF_FRAMEWORK_SSR AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   enable_testing()

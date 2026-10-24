@@ -150,7 +150,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_FLAGS="-fexceptions -mmutable-globals" \
             -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
-          cmake --build build/wasm --target site -- -k 0
+          cmake --build build/wasm --target site site_client -- -k 0
           # One std module: every unit compiled with the same flags. Two, and
           # a unit importing modules made over both is one clang crashes on.
           std=$(grep -oE 'cmake_cxx_std[^/ ]*\.dir' build/wasm/build.ninja | sort -u)
@@ -208,6 +208,8 @@ jobs:
         run: |
           mkdir -p public
           cp build/wasm/site/index.html build/wasm/site/index.js build/wasm/site/index.wasm public/
+          cp build/wasm/site/client.js build/wasm/site/client.wasm public/
+          ls -la build/wasm/site/index.wasm build/wasm/site/client.wasm
           # The page as its own server: its service worker and the page's side.
           cp web/skiff-sw.js web/skiff-served.js public/
           build/native/site/site public/static.html public/index.html
@@ -227,6 +229,7 @@ jobs:
           page.write_text(made)
           PY
           sed -i "s#locateFile(\"index.wasm\")#locateFile(\"index.wasm?v=$V\")#" public/index.js
+          sed -i "s#locateFile(\"client.wasm\")#locateFile(\"client.wasm?v=$V\")#" public/client.js
           grep -q "index.js?v=$V" public/index.html || { echo "site: index.html does not name index.js by revision"; exit 1; }
           grep -q "index.wasm?v=$V" public/index.js || { echo "site: index.js does not name index.wasm by revision"; exit 1; }
           ls -la public

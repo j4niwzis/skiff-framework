@@ -27,8 +27,8 @@
   }                                                                                                                      \
   extern "C" __attribute__((used)) int skiff_canvas_text(const char *typed) { return app::text(typed); }               \
   extern "C" __attribute__((used)) int skiff_loopback_open(int script, const char *action, const char *base,              \
-                                                          const char *path) {                                            \
-    return app::loopbackOpen(script, action, base, path);                                                                \
+                                                          const char *path, const char *revision) {                      \
+    return app::loopbackOpen(script, action, base, path, revision);                                                      \
   }                                                                                                                      \
   extern "C" __attribute__((used)) void skiff_app_route(const char *path, int pushed) { app::route(path, pushed); }      \
   extern "C" __attribute__((used)) int skiff_app_route_known(const char *path) { return app::routeKnown(path); }                                                                                                                      \
@@ -45,3 +45,20 @@
   using skiff_app_t = ::skiff::app::App<&page __VA_OPT__(, ) __VA_ARGS__>;                                               \
   SKIFF_APP_ENTRIES(skiff_app_t)                                                                                         \
   int main(int argc, char **argv) { return skiff_app_t::run(argc, argv); }
+
+// SKIFF_APP_CLIENT(clients, Hooks): the program built for a page served
+// live -- only its parts that are the browser's own, said by `clients` (a
+// function returning them, as views, in the order they are in the page).
+// main, and what the page's JavaScript calls; nothing natively.
+#ifdef __EMSCRIPTEN__
+#define SKIFF_APP_CLIENT(clients, ...)                                                                                   \
+  using skiff_client_t = ::skiff::app::ClientApp<&clients __VA_OPT__(, ) __VA_ARGS__>;                                   \
+  extern "C" __attribute__((used)) void skiff_web_event(unsigned handle, const char *what, const char *value) {          \
+    skiff_client_t::event(handle, what, value);                                                                          \
+  }                                                                                                                      \
+  extern "C" __attribute__((used)) void skiff_app_wake() { skiff_client_t::settle(); }                                   \
+  int main() { return skiff_client_t::run(); }
+#else
+#define SKIFF_APP_CLIENT(clients, ...)                                                                                   \
+  int main() { return 0; }
+#endif

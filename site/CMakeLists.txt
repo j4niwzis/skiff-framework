@@ -12,3 +12,11 @@ target_link_libraries(site_ui PUBLIC skiff::framework)
 add_executable(site ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cc)
 target_link_libraries(site PRIVATE site_ui)
 skiff_app(site SHELL ${CMAKE_CURRENT_SOURCE_DIR}/web/index.html)
+
+# Its parts that are the browser's own, alone: client.js and client.wasm,
+# what a page served with script loads.
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  add_executable(site_client ${CMAKE_CURRENT_SOURCE_DIR}/src/client.cc)
+  target_link_libraries(site_client PRIVATE site_ui)
+  skiff_app_client(site_client)
+endif()

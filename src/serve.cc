@@ -53,7 +53,7 @@ struct Event {
   std::string session;
 };
 // The program built for the browser, for the parts that are its own.
-enum class Asset : std::uint8_t { kScript, kWasm };
+enum class Asset : std::uint8_t { kScript, kWasm, kClientScript, kClientWasm };
 struct File {
   Asset asset;
 };
@@ -68,6 +68,8 @@ inline constexpr std::string_view kClientPath = "/skiff/client/";
   if (verb == http::verb::post && path == kEventPath && query.starts_with("s=")) return Event{std::string(query.substr(2))};
   if (verb == http::verb::get && path == std::string(kClientPath) + "index.js") return File{Asset::kScript};
   if (verb == http::verb::get && path == std::string(kClientPath) + "index.wasm") return File{Asset::kWasm};
+  if (verb == http::verb::get && path == std::string(kClientPath) + "client.js") return File{Asset::kClientScript};
+  if (verb == http::verb::get && path == std::string(kClientPath) + "client.wasm") return File{Asset::kClientWasm};
   if (verb == http::verb::get && !path.starts_with("/skiff/")) return Page{std::string(path)};
   return Missing{};
 }
@@ -120,7 +122,14 @@ template <class A> struct Server {
     // The route the path asked for: where the session begins.
     skiff::app::route::Router<typename A::Model> router;
     (void)router.arrive(session.model, path);
-    if (client && script) options.head += "<script async src=\"" + std::string(kClientPath) + "index.js\"></script>\n";
+    // The program for the browser's parts: its client build where it has
+    // one (Hooks::clientScript), else the whole program.
+    if (client && script) {
+      std::string name = "index.js";
+      if constexpr (requires { A::hooks().clientScript(); })
+        name = std::string(A::hooks().clientScript());
+      options.head += "<script async src=\"" + std::string(kClientPath) + name + "\"></script>\n";
+    }
     session.page.emplace(skiff::ui::mount(skiff::ui::onPage, A::view()), session.model, std::move(options));
 
     http::response<http::empty_body> head{http::status::ok, version};
@@ -203,7 +212,8 @@ template <class A> struct Server {
     struct Kind {
       std::string_view name, type;
     };
-    static constexpr std::array<Kind, 2> kKinds{Kind{"index.js", "text/javascript"}, Kind{"index.wasm", "application/wasm"}};
+    static constexpr std::array<Kind, 4> kKinds{Kind{"index.js", "text/javascript"}, Kind{"index.wasm", "application/wasm"},
+                                                Kind{"client.js", "text/javascript"}, Kind{"client.wasm", "application/wasm"}};
     const Kind kind = kKinds[std::to_underlying(file.asset)];
     std::ifstream in(*client / kind.name, std::ios::binary);
     if (!in) co_return co_await missing(socket, version);

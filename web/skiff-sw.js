@@ -67,8 +67,8 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       await running;
       const script = url.searchParams.get('script') !== '0';
-      const id = Module.ccall('skiff_loopback_open', 'number', ['number', 'string', 'string', 'string'],
-                              [script ? 1 : 0, base + 'skiff/event', base, rest === 'index.html' ? '' : rest]);
+      const id = Module.ccall('skiff_loopback_open', 'number', ['number', 'string', 'string', 'string', 'string'],
+                              [script ? 1 : 0, base + 'skiff/event', base, rest === 'index.html' ? '' : rest, version || '']);
       // The stream: what the program hands out, as it comes; its session
       // let go with it.
       const stream = new ReadableStream({

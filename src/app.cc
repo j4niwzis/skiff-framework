@@ -487,6 +487,15 @@ template <auto View, class Hooks = NoHooks> struct App {
     settle();
     return 0;
   }
+  // The program built for the parts that are the browser's own, where the
+  // program has one (Hooks::clientScript, a client build -- SKIFF_APP_CLIENT):
+  // what a page served with script loads; else the whole program.
+  [[nodiscard]] static std::string clientScript() {
+    if constexpr (requires { hooks().clientScript(); })
+      return std::string(hooks().clientScript());
+    else
+      return "index.js";
+  }
   // ---- the page as its own server: loopback ----
   // What a server does with the page (skiff::web::Live), done here in the
   // browser: each session a model of its own and the page kept for it, its
@@ -514,7 +523,7 @@ template <auto View, class Hooks = NoHooks> struct App {
     made[text.size()] = '\0';
     return made;
   }
-  static int loopbackOpen(int script, const char *action, const char *base, const char *path) {
+  static int loopbackOpen(int script, const char *action, const char *base, const char *path, const char *revision) {
     static int last = 0;
     const int id = ++last;
     Loopback &one = *loopbacks().emplace(id, std::make_unique<Loopback>()).first->second;
@@ -533,7 +542,7 @@ template <auto View, class Hooks = NoHooks> struct App {
     // With script, the program itself in the page served, for the parts
     // that are the browser's own (clients): the same index.js, beside where
     // it is served from.
-    if (options.script) options.head += "<script async src=\"../index.js\"></script>\n";
+    if (options.script) options.head += "<script async src=\"../" + clientScript() + (*revision ? std::string("?v=") + revision : "") + "\"></script>\n";
     // What the program puts first on a page it serves (Hooks::servedLead):
     // a way back to the page, say.
     if constexpr (requires { hooks().servedLead(options.script); })
@@ -612,6 +621,97 @@ template <auto View, class Hooks = NoHooks> struct App {
     return prerender(argc, argv);
 #endif
   }
+};
+
+// ---- the parts that are the browser's own, alone: ClientApp ----------------
+//
+// The program built for a page served live, where it has parts that are the
+// browser's own (client(view)): only those, said by `Clients` -- a function
+// returning them, as views, in the order they are in the page -- each mounted
+// as a client with a model of its own, taken over where the server wrote it
+// (by its index), its events its own, the frame hook given its model. Nothing
+// of the rest of the program's tree is reached, so none of it is in this
+// build: SKIFF_APP_CLIENT(clients, Hooks), skiff_app_client(target).
+template <auto Clients, class Hooks = NoHooks> struct ClientApp {
+  static Hooks &hooks() {
+    static Hooks kept;
+    return kept;
+  }
+  static auto make() {
+    return std::apply([](auto... view) { return std::tuple{skiff::ui::mount(skiff::ui::onPage, skiff::ui::client(std::move(view)))...}; },
+                      Clients());
+  }
+  using Made = decltype(make());
+  static std::optional<Made> &made() {
+    static std::optional<Made> kept;
+    return kept;
+  }
+  template <class F> static void each(F &&f) {
+    if (!made()) return;
+    std::uint32_t index = 0;
+    std::apply([&](auto &...one) { (f(one, index++), ...); }, *made());
+  }
+  template <class T> static constexpr bool kFramed = requires(T &one) { hooks().frame(one.model(), 0.0); };
+  static constexpr bool kFrames = []<class... T>(std::type_identity<std::tuple<T...>>) {
+    return (kFramed<T> || ... || false);
+  }(std::type_identity<Made>{});
+
+#ifdef __EMSCRIPTEN__
+  static double &startedAt() {
+    static double kept = 0.0;
+    return kept;
+  }
+  static bool &looping() {
+    static bool kept = false;
+    return kept;
+  }
+  static void takeOver() {
+    each([](auto &one, std::uint32_t index) {
+      if (one.element() != skiff::web::dom::kNone) return;
+      const skiff::web::dom::Handle at = skiff::web::dom::marked("data-skiff-client", std::to_string(index));
+      if (at == skiff::web::dom::kNone) return;
+      one.fState.fHandle = at;
+      one.client().hydrate(at, 0);
+      skiff::web::dom::attr(at, "data-skiff-hydrated", "");
+    });
+  }
+  static void refresh() {
+    each([](auto &one, std::uint32_t) {
+      if (one.element() != skiff::web::dom::kNone) one.client().refresh();
+    });
+  }
+  static void tick() {
+    const double seconds = (emscripten_get_now() - startedAt()) / 1000.0;
+    each([&](auto &one, std::uint32_t) {
+      if constexpr (kFramed<std::remove_cvref_t<decltype(one)>>)
+        if (one.element() != skiff::web::dom::kNone) hooks().frame(one.model(), seconds);
+    });
+    refresh();
+  }
+  static void settle() {
+    takeOver();
+    refresh();
+    if (kFrames && !looping()) {
+      looping() = true;
+      emscripten_set_main_loop([] { tick(); }, 0, 0);
+    }
+  }
+  static void event(std::uint32_t handle, const char *what, const char *value) {
+    each([&](auto &one, std::uint32_t) {
+      if (one.element() != skiff::web::dom::kNone && one.client().owns(handle))
+        one.client().event(handle, std::string_view(what), std::string_view(value));
+    });
+    settle();
+  }
+  static int run() {
+    if constexpr (requires { hooks().dress(); })
+      hooks().dress();
+    made().emplace(make());
+    startedAt() = emscripten_get_now();
+    settle();
+    return 0;
+  }
+#endif
 };
 
 } // namespace skiff::app
