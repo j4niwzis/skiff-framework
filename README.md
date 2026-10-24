@@ -113,6 +113,27 @@ The machinery is `skiff::web::Live` and `skiff::web::Client` in skiff.
 
 **No server at all.** In the browser, a program of skiff.app can be its own server (its *loopback*): `web/skiff-sw.js`, a service worker, answers requests under `served/` as `skiff.app.serve` would. It streams the page and takes posted forms, while the page's own WebAssembly does the server's part through `web/skiff-served.js`. The site's switch (*page · served, no JS · served, JS*) shows the page served both ways, with no server. A canvas of the page's own needs script, so it stays blank here.
 
+## The network
+
+`net` is a feature (`COMPONENTS net`, or `-DSKIFF_FRAMEWORK_NET=ON`), `skiff.app.net`. A request is declared in the model, not called for: it is a model part, `net::Fetched<Ask>`. `Ask` is the program's own type: its `request()` (URL, method, body, headers, timeout) and `using answer = T` (`net::text` for the body as it came).
+
+```c++
+struct WeatherIn {
+  std::string city;
+  using answer = Weather;                       // read once, by knot
+  net::request request() const { return {.url = "https://example.org/weather/" + city}; }
+};
+// a handler asks, by an edit:
+model::over<net::Fetched<WeatherIn>>(net::ask(WeatherIn{"Oslo"}))
+// the tree shows the part's state: idle, loading{attempt}, ok<Weather>{value}, failed{why, status}
+```
+
+The framework runs what is asked:
+- **In the browser** with `fetch`, at every frame.
+- **Served**, natively from the server through Beast with TLS (OpenSSL); the answer reaches the page like any other change of the model.
+- **Retries:** the network failing, 5xx and 429 are tried again, waiting a little longer each time (its `Retry-After` honoured), as many times as `retries()` says (4 by default). Anything else fails at once.
+- **Asking again** (`ask` once more) asks again; what was on its way for the earlier round is let go.
+
 ## The window
 
 `skiff.platform.window` (`src/platform/`): skiff's scene in a window of the

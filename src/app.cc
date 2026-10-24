@@ -57,6 +57,7 @@ import std;
 import skiff.app.carry;
 import skiff.app.canvas;
 import skiff.app.serve;
+import skiff.app.net;
 
 #ifdef __EMSCRIPTEN__
 // ---- the page's side, in JavaScript ---------------------------------------
@@ -255,10 +256,17 @@ template <auto View, class Hooks = NoHooks> struct App {
     static double kept = 0.0;
     return kept;
   }
+  // What the model asks of the network (skiff.app.net), asked by the
+  // browser's fetch: stepped at every frame.
+  static skiff::app::net::Runner<Model, skiff::app::net::browser> &runner() {
+    static skiff::app::net::Runner<Model, skiff::app::net::browser> kept{skiff::app::net::browser{}};
+    return kept;
+  }
   static void tick() {
     const double now = emscripten_get_now();
     if constexpr (requires { hooks().frame(model(), 0.0); })
       hooks().frame(model(), (now - startedAt()) / 1000.0);
+    runner().step(model());
     bool onCanvas = false;
     if constexpr (requires { hooks().onCanvas(std::as_const(model())); })
       onCanvas = hooks().onCanvas(std::as_const(model()));
@@ -319,6 +327,8 @@ template <auto View, class Hooks = NoHooks> struct App {
   struct Loopback {
     Model model;
     std::optional<skiff::web::Live<PageTree, Model>> page;
+    // What its model asks of the network, asked by the browser's fetch.
+    skiff::app::net::Runner<Model, skiff::app::net::browser> runner{skiff::app::net::browser{}};
   };
   static std::map<int, std::unique_ptr<Loopback>> &loopbacks() {
     static std::map<int, std::unique_ptr<Loopback>> kept;
@@ -360,10 +370,15 @@ template <auto View, class Hooks = NoHooks> struct App {
   }
   static char *loopbackNext(int id) {
     Loopback *one = loopback(id);
-    return one ? handedOut(one->page->update()) : nullptr;
+    if (!one) return nullptr;
+    one->runner.step(one->model);
+    return handedOut(one->page->update());
   }
   static void loopbackPost(int id, const char *body) {
-    if (Loopback *one = loopback(id)) one->page->post(std::string_view(body));
+    if (Loopback *one = loopback(id)) {
+      one->page->post(std::string_view(body));
+      one->runner.step(one->model);
+    }
   }
   static void loopbackClose(int id) { loopbacks().erase(id); }
 

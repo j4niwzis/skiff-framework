@@ -29,6 +29,8 @@ export module skiff.app.serve;
 
 import std;
 import skiff.ui;
+import skiff.app.net;
+import skiff.app.net.native;
 
 namespace skiff::app::serve {
 
@@ -77,9 +79,14 @@ template <class A> struct Session {
   using Live = skiff::web::Live<typename A::PageTree, typename A::Model>;
   typename A::Model model;
   std::optional<Live> page;
-  // Woken where a form was posted: the stream sends what it moved.
+  // Woken where a form was posted, or an answer came from the network: the
+  // stream sends what it moved.
   asio::steady_timer wake;
-  explicit Session(asio::any_io_executor ex) : wake(ex, asio::steady_timer::time_point::max()) {}
+  // What its model asks of the network (skiff.app.net), asked from here.
+  skiff::app::net::Runner<typename A::Model, skiff::app::net::native> runner;
+  explicit Session(asio::any_io_executor ex) : wake(ex, asio::steady_timer::time_point::max()), runner(skiff::app::net::native(ex)) {
+    runner.transport().wakes(&wake);
+  }
 };
 
 template <class A> struct Server {
@@ -113,16 +120,21 @@ template <class A> struct Server {
     co_await http::async_write_header(socket, serializer, asio::redirect_error(asio::use_awaitable, ec));
     std::string piece = session.page->begin();
     while (!ec) {
-      if (piece.empty()) {
-        session.wake.expires_after(kHeartbeat);
-        beast::error_code woken;
-        co_await session.wake.async_wait(asio::redirect_error(asio::use_awaitable, woken));
-        piece = session.page->update();
-        if (piece.empty() && !woken) piece = std::string(skiff::web::live::kHeartbeat);
-        continue;
+      if (!piece.empty()) {
+        co_await asio::async_write(socket.socket(), http::make_chunk(asio::buffer(piece)), asio::redirect_error(asio::use_awaitable, ec));
+        if (ec) break;
       }
-      co_await asio::async_write(socket.socket(), http::make_chunk(asio::buffer(piece)), asio::redirect_error(asio::use_awaitable, ec));
+      session.runner.step(session.model);
       piece = session.page->update();
+      if (!piece.empty()) continue;
+      // Nothing to send: waited for -- a post, an answer, a request to try
+      // again (looked at often while one waits), or the heartbeat.
+      session.wake.expires_after(session.runner.busy() ? std::chrono::milliseconds(100) : std::chrono::milliseconds(kHeartbeat));
+      beast::error_code woken;
+      co_await session.wake.async_wait(asio::redirect_error(asio::use_awaitable, woken));
+      session.runner.step(session.model);
+      piece = session.page->update();
+      if (piece.empty() && !woken && !session.runner.busy()) piece = std::string(skiff::web::live::kHeartbeat);
     }
     sessions.erase(name);
   }

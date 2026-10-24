@@ -148,6 +148,8 @@ jobs:
           cmake --build build/native --target skiff_framework_state_test -- -k 0
           build/native/skiff_framework_state_test
           cmake --build build/native --target skiff_framework_page_test -- -k 0
+          cmake --build build/native --target skiff_framework_net_test skiff_framework_net_native_test -- -k 0
+          (cd build/native && ctest -R net --output-on-failure)
           (cd build/native && ctest -R page --output-on-failure)
           # Served live: the page streamed, a generation of it in the first piece.
           build/native/skiff_framework_page_test serve 8099 &
