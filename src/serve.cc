@@ -140,11 +140,16 @@ template <class A> struct Server {
     beast::error_code ec;
     co_await http::async_write_header(socket, serializer, asio::redirect_error(asio::use_awaitable, ec));
     std::string piece = session.page->begin();
+    const auto began = std::chrono::steady_clock::now();
     while (!ec) {
       if (!piece.empty()) {
         co_await asio::async_write(socket.socket(), http::make_chunk(asio::buffer(piece)), asio::redirect_error(asio::use_awaitable, ec));
         if (ec) break;
       }
+      // The frame hook, on the session's own model, where the program has
+      // one: what reads its clock moves on the page served.
+      if constexpr (requires { A::hooks().frame(session.model, 0.0); })
+        A::hooks().frame(session.model, std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count());
       session.ticker.step(session.model);
       session.runner.step(session.model);
       piece = session.page->update();
@@ -152,6 +157,9 @@ template <class A> struct Server {
       // Nothing to send: waited for -- a post, an answer, a request to try
       // again (looked at often while one waits), a timer, or the heartbeat.
       auto wait = session.runner.busy() ? std::chrono::milliseconds(100) : std::chrono::milliseconds(kHeartbeat);
+      // A frame hook: a frame a tenth of a second on.
+      if constexpr (requires { A::hooks().frame(session.model, 0.0); })
+        wait = std::min(wait, std::chrono::milliseconds(100));
       if (const auto due = session.ticker.next())
         wait = std::clamp(std::chrono::duration_cast<std::chrono::milliseconds>(*due - std::chrono::steady_clock::now()),
                           std::chrono::milliseconds(1), wait);

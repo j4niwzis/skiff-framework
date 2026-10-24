@@ -405,6 +405,10 @@ template <auto View, class Hooks = NoHooks> struct App {
     if (const auto next = soonest()) {
       const auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(*next - std::chrono::steady_clock::now());
       skiffAppWakeIn(static_cast<int>(std::max<long long>(1, wait.count())));
+    } else if (kFrames && !loopbacks().empty()) {
+      // Sessions served, and a frame hook: woken a tenth of a second on, for
+      // their frames.
+      skiffAppWakeIn(100);
     }
     skiffAppSettled();
   }
@@ -505,6 +509,8 @@ template <auto View, class Hooks = NoHooks> struct App {
   // seen with no server at all (the site's switch).
   struct Loopback {
     Model model;
+    // When it began: the frame hook's clock, served.
+    double began = 0.0;
     std::optional<skiff::web::Live<PageTree, Model>> page;
     // What its model asks of the network, asked by the browser's fetch; its timers.
     skiff::app::net::Runner<Model, skiff::app::net::browser> runner{skiff::app::net::browser{}};
@@ -527,6 +533,7 @@ template <auto View, class Hooks = NoHooks> struct App {
     static int last = 0;
     const int id = ++last;
     Loopback &one = *loopbacks().emplace(id, std::make_unique<Loopback>()).first->second;
+    one.began = emscripten_get_now();
     if constexpr (requires { hooks().start(one.model); })
       hooks().start(one.model);
     typename skiff::web::Live<PageTree, Model>::Options options;
@@ -565,6 +572,11 @@ template <auto View, class Hooks = NoHooks> struct App {
   static char *loopbackNext(int id) {
     Loopback *one = loopback(id);
     if (!one) return nullptr;
+    // Served, the frame hook too, on the session's own model: what reads
+    // its clock moves on the page served -- a part that is the browser's
+    // own (a client) is not sent again, and moves only where there is script.
+    if constexpr (kFrames)
+      hooks().frame(one->model, (emscripten_get_now() - one->began) / 1000.0);
     one->ticker.step(one->model);
     one->runner.step(one->model);
     return handedOut(one->page->update());
