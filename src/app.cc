@@ -37,6 +37,10 @@
 // live instead (skiff.app.serve): the tree and a model for each browser kept
 // on the server, the page one HTML stream appended to as the model moves,
 // what is done on it posted back as a form -- no script, no WebAssembly.
+// Parts said client(view) are the browser's own: the program built for the
+// browser, served with the page (serve --client DIR), takes each over where
+// the server wrote it -- rendered partly on the server, partly in the
+// browser, where there is script.
 //
 // Without the canvas feature -- a frontend, whose page is the browser's
 // elements and nothing else -- there is no scene in the build at all: no
@@ -62,6 +66,9 @@ import skiff.app.serve;
 EM_JS(void, skiffAppOpen, (const char *href, int length), { window.location.href = UTF8ToString(href, length); });
 // The state the page was written with, where it carries one: its text, made
 // for the program to free; else none.
+// Whether the page was served live (skiff.app.serve): its parts the
+// server's, but for those that are the browser's own (clients).
+EM_JS(int, skiffAppServed, (), { return document.querySelector('skiff-live') ? 1 : 0; });
 EM_JS(char *, skiffAppStateText, (), {
   const kept = document.getElementById('skiff-state');
   return kept ? stringToNewUTF8(kept.textContent) : 0;
@@ -159,9 +166,21 @@ template <auto View, class Hooks = NoHooks> struct App {
     page().emplace(skiff::ui::mount(skiff::ui::onPage, View()), model());
     page()->mount();
   }
-  // What happens at a node of the page (skiff_web_event).
+  // What happens at a node of the page (skiff_web_event): the page's, or,
+  // where the page was served live, the client's it happened in.
   static void event(std::uint32_t handle, const char *what, const char *value) {
     if (page()) page()->event(handle, std::string_view(what), std::string_view(value));
+    if (served())
+      skiff::web::forEachClient(*served(), [&](auto &one) {
+        if (one.element() != skiff::web::dom::kNone && one.client().owns(handle))
+          one.client().event(handle, std::string_view(what), std::string_view(value));
+      });
+  }
+  // The tree, where the page was served live: kept for its clients alone --
+  // each taken over where the server wrote it, its page the browser's.
+  static std::optional<PageTree> &served() {
+    static std::optional<PageTree> kept;
+    return kept;
   }
 
   static void begin(bool arrived = false) {
@@ -264,7 +283,34 @@ template <auto View, class Hooks = NoHooks> struct App {
     model() = Model(std::move(*read));
     return true;
   }
+  // Served live: each client the server wrote taken over -- hydrated, with
+  // its own model -- as it arrives in the stream; the rest is the server's.
+  static void takeOver() {
+    skiff::web::forEachClient(*served(), [](auto &one) {
+      if (one.element() != skiff::web::dom::kNone) return;
+      const skiff::web::dom::Handle at = skiff::web::dom::marked("data-skiff-client", std::to_string(one.fIndex));
+      if (at == skiff::web::dom::kNone) return;
+      one.fState.fHandle = at;
+      one.client().hydrate(at, 0);
+      skiff::web::dom::attr(at, "data-skiff-hydrated", "");
+    });
+  }
+  static void servedTick() {
+    takeOver();
+    skiff::web::forEachClient(*served(), [](auto &one) {
+      if (one.element() != skiff::web::dom::kNone) one.client().refresh();
+    });
+  }
+  static int hybrid() {
+    if constexpr (requires { hooks().dress(); })
+      hooks().dress();
+    served().emplace(skiff::ui::mount(skiff::ui::onPage, View()));
+    skiff::web::numberClients(*served());
+    emscripten_set_main_loop([] { servedTick(); }, 0, 0);
+    return 0;
+  }
   static int live() {
+    if (skiffAppServed()) return hybrid();
     begin(arrive());
     const skiff::web::dom::Handle root = skiff::web::dom::root();
     if (skiff::web::dom::children(root) > sheets()) {

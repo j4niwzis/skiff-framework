@@ -101,7 +101,15 @@ Where the browser runs script, an optional inline script of a few lines improves
 - what is typed is posted as it is typed;
 - the field being typed in is taken as already shown, so it is never sent again under the user's hand.
 
-The machinery is `skiff::web::Live` in skiff. A canvas of the page's own needs script, so it stays blank here.
+**Partly on the server, partly in the browser** (with script only). A part of the tree said `client(view)` belongs to the browser:
+- it has a model of its own, which the server's model doesn't hold;
+- the server writes it once and never sends it again;
+- the program built for the browser takes it over where the server wrote it, served with the page by `serve --client DIR` (`index.js`, `index.wasm`);
+- from then on it runs there, interactive and drawn, while everything around it stays the server's.
+
+Without script, the part stays as the server wrote it.
+
+The machinery is `skiff::web::Live` and `skiff::web::Client` in skiff. A canvas of the page's own needs script, so it stays blank here.
 
 ## The window
 

@@ -121,7 +121,7 @@ if(SKIFF_FRAMEWORK_APP)
       NAME skiff-widgets
       PROVIDES skiff-widgets skiff_widgets
       GITHUB_REPOSITORY j4niwzis/skiff-widgets
-      GIT_TAG 565f7dd1f25ae30598bf87c51102671ebd0fce21
+      GIT_TAG fde6ab0ee8a84874e825b7eb42da912b869144a2
       VERSION 0.1.0
     )
   endif()
@@ -231,7 +231,7 @@ if(skiff_framework_has_window)
         NAME skiff-widgets
         PROVIDES skiff-widgets skiff_widgets
         GITHUB_REPOSITORY j4niwzis/skiff-widgets
-        GIT_TAG 565f7dd1f25ae30598bf87c51102671ebd0fce21
+        GIT_TAG fde6ab0ee8a84874e825b7eb42da912b869144a2
         VERSION 0.1.0
       )
     endif()

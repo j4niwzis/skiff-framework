@@ -158,6 +158,7 @@ jobs:
           head -c 2000 /tmp/live.html
           grep -q '<skiff-live id="skiff-g1"><template shadowrootmode="open">' /tmp/live.html
           grep -q 'A page, and a canvas in it' /tmp/live.html
+          grep -q '<skiff-client data-skiff-client="0"' /tmp/live.html
           std=$(grep -oE 'cmake_cxx_std[^/ ]*\.dir' build/native/build.ninja | sort -u)
           echo "$std"
           test "$(echo "$std" | wc -l)" = 1

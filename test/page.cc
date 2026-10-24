@@ -1,7 +1,8 @@
 // A page alone, as a frontend has it: skiff.app with no canvas feature
 // needed -- words, and a canvas of the page's own (a <canvas> element among
 // the others, drawn by its node through the page's painter), not the whole
-// tree drawn by the scene. Written out natively; the test reads the page.
+// tree drawn by the scene -- the browser's own part of it. Written out
+// natively, and served live; the test reads the page.
 import std;
 import skiff.app;
 #include <skiff/app.h>
@@ -21,7 +22,11 @@ struct Sketch : skiff::web::Canvas {
 struct Drawing {
   auto on(skiff::ui::OnPage) && { return Sketch(); }
 };
-auto page() { return skiff::ui::column(skiff::ui::Text("A page, and a canvas in it", 20.0f, 0xff000000u, true), Drawing()); }
+// The drawing the browser's own (client): served live, the browser's build
+// takes it over and draws it where there is script.
+auto page() {
+  return skiff::ui::column(skiff::ui::Text("A page, and a canvas in it", 20.0f, 0xff000000u, true), skiff::ui::client(Drawing()));
+}
 } // namespace probe
 
 SKIFF_APP(probe::page)

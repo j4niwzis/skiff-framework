@@ -1,5 +1,5 @@
 // skiff.app.serve: skiff.app's page served live -- the framework's live
-// feature. `program serve [port] [--no-script]` listens (127.0.0.1, 8080 unless said) and
+// feature. `program serve [port] [--no-script] [--client DIR]` listens (127.0.0.1, 8080 unless said) and
 // keeps, for each browser that opens the page, the program's tree and a
 // model of its own on the server (skiff::web::Live): the page goes out as
 // one HTML stream that is never closed, what the browser does comes back as
@@ -12,6 +12,10 @@
 //
 //   GET  /                       the page, streamed; a session made for it
 //   POST /skiff/event?s=SESSION  a form posted from the page: 204
+//   GET  /skiff/client/index.js, index.wasm
+//                                the program built for the browser (--client
+//                                DIR), which takes over the parts that are
+//                                its own (client(view)) where there is script
 //
 // Each session's start(Model &) is the program's (Hooks::start), as a page
 // made in the browser starts. A quiet stream is kept open by a heartbeat.
@@ -41,8 +45,14 @@ struct Page {};
 struct Event {
   std::string session;
 };
+// The program built for the browser, for the parts that are its own.
+enum class Asset : std::uint8_t { kScript, kWasm };
+struct File {
+  Asset asset;
+};
 struct Missing {};
-using Route = std::variant<Page, Event, Missing>;
+using Route = std::variant<Page, Event, File, Missing>;
+inline constexpr std::string_view kClientPath = "/skiff/client/";
 
 [[nodiscard]] inline Route routeOf(http::verb verb, std::string_view target) {
   const std::size_t q = std::min(target.find('?'), target.size());
@@ -50,6 +60,8 @@ using Route = std::variant<Page, Event, Missing>;
   const std::string_view query = target.substr(std::min(q + 1, target.size()));
   if (verb == http::verb::get && path == "/") return Page{};
   if (verb == http::verb::post && path == kEventPath && query.starts_with("s=")) return Event{std::string(query.substr(2))};
+  if (verb == http::verb::get && path == std::string(kClientPath) + "index.js") return File{Asset::kScript};
+  if (verb == http::verb::get && path == std::string(kClientPath) + "index.wasm") return File{Asset::kWasm};
   return Missing{};
 }
 
@@ -74,6 +86,9 @@ template <class A> struct Server {
   std::unordered_map<std::string, std::unique_ptr<Session<A>>> sessions;
   std::string css;
   bool script = true;
+  // Where the program built for the browser is (index.js, index.wasm), if
+  // it is served with the page.
+  std::optional<std::filesystem::path> client;
 
   asio::awaitable<void> stream(beast::tcp_stream &socket, unsigned version) {
     const std::string name = sessionName();
@@ -86,6 +101,7 @@ template <class A> struct Server {
     options.script = script;
     if constexpr (requires { A::hooks().head(); })
       options.head = std::string(A::hooks().head());
+    if (client && script) options.head += "<script async src=\"" + std::string(kClientPath) + "index.js\"></script>\n";
     session.page.emplace(skiff::ui::mount(skiff::ui::onPage, A::view()), session.model, std::move(options));
 
     http::response<http::empty_body> head{http::status::ok, version};
@@ -149,8 +165,25 @@ template <class A> struct Server {
       return server.stream(socket, version);
     }
     asio::awaitable<void> operator()(const Event &to) const { return server.event(socket, version, to, body); }
+    asio::awaitable<void> operator()(const File &file) const { return server.file(socket, version, file); }
     asio::awaitable<void> operator()(const Missing &) const { return missing(socket, version); }
   };
+  asio::awaitable<void> file(beast::tcp_stream &socket, unsigned version, const File &file) {
+    if (!client) co_return co_await missing(socket, version);
+    struct Kind {
+      std::string_view name, type;
+    };
+    static constexpr std::array<Kind, 2> kKinds{Kind{"index.js", "text/javascript"}, Kind{"index.wasm", "application/wasm"}};
+    const Kind kind = kKinds[std::to_underlying(file.asset)];
+    std::ifstream in(*client / kind.name, std::ios::binary);
+    if (!in) co_return co_await missing(socket, version);
+    http::response<http::string_body> answer{http::status::ok, version};
+    answer.set(http::field::content_type, kind.type);
+    answer.body() = std::string(std::istreambuf_iterator<char>(in), {});
+    answer.prepare_payload();
+    beast::error_code ec;
+    co_await http::async_write(socket, answer, asio::redirect_error(asio::use_awaitable, ec));
+  }
   static asio::awaitable<void> missing(beast::tcp_stream &socket, unsigned version) {
     http::response<http::string_body> answer{http::status::not_found, version};
     answer.set(http::field::content_type, "text/plain; charset=utf-8");
@@ -180,9 +213,20 @@ template <class A> [[nodiscard]] std::optional<int> run(int argc, char **argv) {
   if (args.empty() || args.front() != "serve") return std::nullopt;
   std::uint16_t port = 8080;
   bool script = true;
+  std::optional<std::filesystem::path> client;
+  bool clientNext = false;
   for (const std::string_view arg : args | std::views::drop(1)) {
+    if (clientNext) {
+      client = std::filesystem::path(arg);
+      clientNext = false;
+      continue;
+    }
     if (arg == "--no-script") {
       script = false;
+      continue;
+    }
+    if (arg == "--client") {
+      clientNext = true;
       continue;
     }
     const auto [end, ec] = std::from_chars(arg.data(), arg.data() + arg.size(), port);
@@ -196,6 +240,7 @@ template <class A> [[nodiscard]] std::optional<int> run(int argc, char **argv) {
   asio::io_context io;
   Server<A> server;
   server.script = script;
+  server.client = client;
   server.css = skiff::ui::themeCss(skiff::widgets::theme());
   if constexpr (requires { A::hooks().stylesheet(); })
     server.css += std::string(A::hooks().stylesheet());
