@@ -27,10 +27,21 @@ const taken = (at) => {
   Module._free(at);
   return text;
 };
+// A session whose page is gone -- its stream closed under it, not always
+// with a word (cancel) first -- let go, rather than thrown on.
+const close = (id) => {
+  sessions.delete(id);
+  Module._skiff_loopback_close(id);
+};
 const pump = () => {
-  for (const [id, stream] of sessions) {
+  for (const [id, stream] of [...sessions]) {
     const piece = taken(Module._skiff_loopback_next(id));
-    if (piece) stream.enqueue(encoder.encode(piece));
+    if (!piece) continue;
+    try {
+      stream.enqueue(encoder.encode(piece));
+    } catch (gone) {
+      close(id);
+    }
   }
 };
 // Taken as the program settles -- an answer come, a timer gone off.
@@ -45,7 +56,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method === 'POST' && rest === 'skiff/event') {
     event.respondWith((async () => {
       await running;
-      const body = await event.request.text();
+      const body = await event.request.text().catch(() => '');
       const known = Module.ccall('skiff_loopback_post', 'number', ['number', 'string'], [Number(url.searchParams.get('s')), body]);
       pump();
       // A session this worker does not have (it was stopped, and started
@@ -76,10 +87,7 @@ self.addEventListener('fetch', (event) => {
           sessions.set(id, controller);
           controller.enqueue(encoder.encode(taken(Module._skiff_loopback_begin(id))));
         },
-        cancel() {
-          sessions.delete(id);
-          Module._skiff_loopback_close(id);
-        },
+        cancel() { close(id); },
       });
       return new Response(stream, {headers: {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'}});
     })());

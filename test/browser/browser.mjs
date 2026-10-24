@@ -34,7 +34,9 @@ for (const [name, kind] of [['chromium', chromium], ['firefox', firefox]]) {
     check(await shown(page, 'Pressed 1 times'), `${name} page: pressed`);
 
     for (const mode of ['nojs', 'js']) {
-      await page.goto(base + '?mode=' + mode);
+      // A served page is a stream that does not end: its load is never
+      // fired. Gone to, and waited for by what it shows.
+      await page.goto(base + '?mode=' + mode, { waitUntil: 'commit' });
       await page.waitForURL(/\/served\//, { timeout: 30000 }).catch(() => {});
       check(page.url().includes('/served/'), `${name} ${mode}: gone to the served page`);
       check(await shown(page, 'Pressed 0 times'), `${name} ${mode}: the counter`);
