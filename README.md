@@ -54,6 +54,34 @@ What a program adds is a `Hooks` struct, every member optional -- its theme
 (`outlineRepaints`), its stylesheet, the canvas's paper, a link followed on
 the canvas (`open`), the `<head>` written out. See `src/app.cc`.
 
+## The window
+
+`skiff.platform.window` (`src/platform/`): skiff's scene in a window of the
+system's -- SDL3 makes it and brings its input; Skia draws the scene, on the
+GPU through GL where there is a GL and in software into the window's own
+pixels where there is not; the system's file dialogs and clipboard; an
+Android activity (SDL's NativeActivity) as one more platform. A frame is drawn
+only where the scene changed or still moves, and the thread otherwise sleeps.
+
+```cpp
+import skiff.platform.window;
+// app: its scene (window()), and the hooks it has -- see the comment over
+// skiff::platform::window::run.
+return skiff::platform::window::run(app, {.title = "myapp"}, kinds);
+```
+
+Each platform is a cmake-everywhere **platform feature** (`linux`,
+`windows`, `macos`, `android`; `wasm` for the page): on for the platform a
+build is for, and naming only what that platform needs -- a build for Android
+brings the window's Android pieces and SDL, one for the browser none of it.
+Sources follow the same names as overlays: `foo_android.cc` replaces
+`foo.cc` on Android, and only the platform's own enter the build.
+
+A program that wants only the window (no `skiff.app`) configures it with
+`SKIFF_FRAMEWORK_APP OFF`; the framework's own build (the site) has no
+window unless `SKIFF_FRAMEWORK_WINDOW` is on. On Android the program declares
+the SDL port it builds with -- the NativeActivity fork, with its glue.
+
 ## The site
 
 [`site/`](site) is skiff's page, a program of `skiff.app`: `page.cc` is its
