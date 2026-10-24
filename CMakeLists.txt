@@ -183,7 +183,7 @@ if(SKIFF_FRAMEWORK_APP)
       NAME skiff-widgets
       PROVIDES skiff-widgets skiff_widgets
       GITHUB_REPOSITORY j4niwzis/skiff-widgets
-      GIT_TAG fde6ab0ee8a84874e825b7eb42da912b869144a2
+      GIT_TAG e0b936336fe9b9dfa9a84adc8ea623114f093856
       VERSION 0.1.0
     )
   endif()
@@ -271,7 +271,7 @@ if(skiff_framework_has_window)
         NAME skiff-widgets
         PROVIDES skiff-widgets skiff_widgets
         GITHUB_REPOSITORY j4niwzis/skiff-widgets
-        GIT_TAG fde6ab0ee8a84874e825b7eb42da912b869144a2
+        GIT_TAG e0b936336fe9b9dfa9a84adc8ea623114f093856
         VERSION 0.1.0
       )
     endif()
@@ -328,7 +328,7 @@ function(skiff_app target)
     set_target_properties(${target} PROPERTIES OUTPUT_NAME index SUFFIX .html)
     # What the page's JavaScript calls: its events, and the canvas's where
     # there is one.
-    set(exported _main,_malloc,_free,_skiff_web_event,_skiff_loopback_open,_skiff_loopback_begin,_skiff_loopback_next,_skiff_loopback_post,_skiff_loopback_close)
+    set(exported _main,_malloc,_free,_skiff_web_event,_skiff_loopback_open,_skiff_loopback_begin,_skiff_loopback_next,_skiff_loopback_post,_skiff_loopback_close,_skiff_app_wake)
     if(SKIFF_FRAMEWORK_CANVAS)
       string(APPEND exported ,_skiff_canvas_pointer,_skiff_canvas_key,_skiff_canvas_text)
     endif()

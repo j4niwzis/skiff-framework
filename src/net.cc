@@ -3,7 +3,8 @@
 // Fetched<Ask>: what is asked (an Ask, the program's own type: where, how,
 // and the type its answer is read into), and where it is -- not asked yet,
 // on its way, answered, failed. A handler asks by an edit (ask(...)); the
-// framework runs what was asked (Runner), on the browser's fetch or natively
+// framework runs what was asked (Runner), on the browser's fetch -- the
+// program woken as each answer comes, no loop waiting on it -- or natively
 // on the server's loop, tries again where it is worth it -- the network
 // failing, the server overloaded (5xx, 429, its Retry-After honoured) -- a
 // little longer each time, and writes what came back into the model as an
@@ -53,7 +54,11 @@ EM_JS(void, skiffNetStart, (double ticket, const char *method, const char *url, 
       net.done[ticket] = {status: answer.status, body: text, after: Number.isFinite(after) && after > 0 ? after * 1000 : -1};
     })
     .catch((failed) => { net.done[ticket] = {status: 0, body: String((failed && failed.message) || failed), after: -1}; })
-    .finally(() => clearTimeout(timer));
+    .finally(() => {
+      clearTimeout(timer);
+      // The program woken for it: no loop waits on it.
+      if (Module._skiff_app_wake) Module._skiff_app_wake();
+    });
 });
 EM_JS(int, skiffNetStatus, (double ticket), {
   const done = Module.skiffNet && Module.skiffNet.done[ticket];
@@ -213,6 +218,16 @@ public:
   }
   void step(Model &model) {
     std::apply([&](auto &...one) { (this->follow(model, one), ...); }, fFlights);
+  }
+  // When the soonest request waiting to be tried again is to be: what to
+  // be woken for.
+  [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next() const {
+    std::optional<std::chrono::steady_clock::time_point> soonest;
+    const auto take = [&](const auto &one) {
+      if (one.again && (!soonest || *one.again < *soonest)) soonest = one.again;
+    };
+    std::apply([&](const auto &...one) { (take(one), ...); }, fFlights);
+    return soonest;
   }
 
 private:

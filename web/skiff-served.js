@@ -39,7 +39,9 @@
       pump();
     }
   });
-  setInterval(pump, 500);
+  // Taken as the program settles -- an answer come, a request's time to be
+  // tried again -- not looked for at intervals.
+  window.addEventListener('skiff-settled', pump);
   const ready = navigator.serviceWorker.register('skiff-sw.js').then(() => navigator.serviceWorker.ready);
   window.skiff = window.skiff || {};
   window.skiff.served = {

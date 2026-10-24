@@ -2,6 +2,8 @@
 // network, nothing of knot in the build for it. A runner that runs nothing.
 export module skiff.app.net;
 
+import std;
+
 export namespace skiff::app::net {
 struct browser {};
 template <class Model, class Transport> class Runner {
@@ -10,6 +12,7 @@ public:
   [[nodiscard]] Transport &transport() noexcept { return fTransport; }
   [[nodiscard]] bool busy() const { return false; }
   void step(Model &) {}
+  [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next() const { return std::nullopt; }
 
 private:
   Transport fTransport;

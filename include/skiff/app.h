@@ -32,7 +32,8 @@
   extern "C" __attribute__((used)) char *skiff_loopback_begin(int id) { return app::loopbackBegin(id); }                 \
   extern "C" __attribute__((used)) char *skiff_loopback_next(int id) { return app::loopbackNext(id); }                   \
   extern "C" __attribute__((used)) void skiff_loopback_post(int id, const char *body) { app::loopbackPost(id, body); }  \
-  extern "C" __attribute__((used)) void skiff_loopback_close(int id) { app::loopbackClose(id); }
+  extern "C" __attribute__((used)) void skiff_loopback_close(int id) { app::loopbackClose(id); }                       \
+  extern "C" __attribute__((used)) void skiff_app_wake() { app::settle(); }
 #else
 #define SKIFF_APP_ENTRIES(app)
 #endif

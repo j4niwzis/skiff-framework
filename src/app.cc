@@ -70,6 +70,15 @@ EM_JS(void, skiffAppOpen, (const char *href, int length), { window.location.href
 // Whether the page was served live (skiff.app.serve): its parts the
 // server's, but for those that are the browser's own (clients).
 EM_JS(int, skiffAppServed, (), { return document.querySelector('skiff-live') ? 1 : 0; });
+// The program woken again after a while (a request to try again), once:
+// the soonest asked.
+EM_JS(void, skiffAppWakeIn, (int ms), {
+  clearTimeout(Module.skiffWakeTimer);
+  Module.skiffWakeTimer = setTimeout(() => Module._skiff_app_wake(), ms);
+});
+// The page's own script told the program has settled: what it serves from
+// the program (skiff-served.js) is taken then.
+EM_JS(void, skiffAppSettled, (), { queueMicrotask(() => window.dispatchEvent(new Event('skiff-settled'))); });
 EM_JS(char *, skiffAppStateText, (), {
   const kept = document.getElementById('skiff-state');
   return kept ? stringToNewUTF8(kept.textContent) : 0;
@@ -176,6 +185,9 @@ template <auto View, class Hooks = NoHooks> struct App {
         if (one.element() != skiff::web::dom::kNone && one.client().owns(handle))
           one.client().event(handle, std::string_view(what), std::string_view(value));
       });
+#ifdef __EMSCRIPTEN__
+    settle();
+#endif
   }
   // The tree, where the page was served live: kept for its clients alone --
   // each taken over where the server wrote it, its page the browser's.
@@ -262,9 +274,59 @@ template <auto View, class Hooks = NoHooks> struct App {
     static skiff::app::net::Runner<Model, skiff::app::net::browser> kept{skiff::app::net::browser{}};
     return kept;
   }
+  // ---- woken, not looping ----
+  // The program runs as things happen to it -- an event on the page, an
+  // answer from the network (its fetch calls skiff_app_wake), a request's
+  // time to be tried again (one timer, for the soonest) -- and settles each
+  // time: what the model asks of the network stepped, the canvas shown or
+  // not, the page written as the model says. A frame loop runs only while
+  // something moves at every frame: the program's frame hook, or the canvas.
+  static constexpr bool kFrames = requires { hooks().frame(model(), 0.0); };
+  static bool &looping() {
+    static bool kept = false;
+    return kept;
+  }
+  static void loop(bool on) {
+    if (on == looping()) return;
+    looping() = on;
+    if (on)
+      emscripten_set_main_loop([] { tick(); }, 0, 0);
+    else
+      emscripten_cancel_main_loop();
+  }
+  // When the soonest request waiting to be tried again is: the program's
+  // own, or one of its loopback sessions'.
+  static std::optional<std::chrono::steady_clock::time_point> soonest() {
+    std::optional<std::chrono::steady_clock::time_point> next = runner().next();
+    for (const auto &[id, one] : loopbacks())
+      if (const auto theirs = one->runner.next(); theirs && (!next || *theirs < *next)) next = theirs;
+    return next;
+  }
+  static void settle() {
+    if (served()) {
+      takeOver();
+      skiff::web::forEachClient(*served(), [](auto &one) {
+        if (one.element() != skiff::web::dom::kNone) one.client().refresh();
+      });
+    } else if (page()) {
+      runner().step(model());
+      bool onCanvas = false;
+      if constexpr (requires { hooks().onCanvas(std::as_const(model())); })
+        onCanvas = hooks().onCanvas(std::as_const(model()));
+      if (onCanvas != Canvas::shown()) Canvas::show(onCanvas);
+      if (!Canvas::shown()) page()->refresh();
+      loop(kFrames || Canvas::shown());
+    }
+    if (const auto next = soonest()) {
+      const auto wait = std::chrono::duration_cast<std::chrono::milliseconds>(*next - std::chrono::steady_clock::now());
+      skiffAppWakeIn(static_cast<int>(std::max<long long>(1, wait.count())));
+    }
+    skiffAppSettled();
+  }
+  // The frame, while there is one: the frame hook, the canvas drawn.
   static void tick() {
     const double now = emscripten_get_now();
-    if constexpr (requires { hooks().frame(model(), 0.0); })
+    if constexpr (kFrames)
       hooks().frame(model(), (now - startedAt()) / 1000.0);
     runner().step(model());
     bool onCanvas = false;
@@ -275,6 +337,7 @@ template <auto View, class Hooks = NoHooks> struct App {
       Canvas::frame(now);
     else
       page()->refresh();
+    if (!kFrames && !Canvas::shown()) loop(false);
   }
   // In the browser: the copy written when the program was built -- the
   // stylesheets, then the page -- taken over, not made again: the same
@@ -303,18 +366,14 @@ template <auto View, class Hooks = NoHooks> struct App {
       skiff::web::dom::attr(at, "data-skiff-hydrated", "");
     });
   }
-  static void servedTick() {
-    takeOver();
-    skiff::web::forEachClient(*served(), [](auto &one) {
-      if (one.element() != skiff::web::dom::kNone) one.client().refresh();
-    });
-  }
+  // Served live: no loop at all -- woken as a client's island arrives (the
+  // page's script tells it), and by the clients' own events.
   static int hybrid() {
     if constexpr (requires { hooks().dress(); })
       hooks().dress();
     served().emplace(skiff::ui::mount(skiff::ui::onPage, View()));
     skiff::web::numberClients(*served());
-    emscripten_set_main_loop([] { servedTick(); }, 0, 0);
+    settle();
     return 0;
   }
   // ---- the page as its own server: loopback ----
@@ -393,7 +452,7 @@ template <auto View, class Hooks = NoHooks> struct App {
       mountPage();
     }
     startedAt() = emscripten_get_now();
-    emscripten_set_main_loop([] { tick(); }, 0, 0);
+    settle();
     return 0;
   }
 #endif
