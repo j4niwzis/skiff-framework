@@ -96,6 +96,11 @@ The browser gets one HTML stream that is never closed and only ever appended to,
   A text field's value goes with the next press, or with Enter.
 - **Heartbeat.** A quiet stream is kept alive by one every 25 s.
 
+Where the browser runs script, an optional inline script of a few lines improves the same page; `--no-script` leaves it out:
+- presses are posted by `fetch`, so the field the user is in keeps its focus;
+- what is typed is posted as it is typed;
+- the field being typed in is taken as already shown, so it is never sent again under the user's hand.
+
 The machinery is `skiff::web::Live` in skiff. A canvas of the page's own needs script, so it stays blank here.
 
 ## The window

@@ -1,11 +1,14 @@
 // skiff.app.serve: skiff.app's page served live -- the framework's live
-// feature. `program serve [port]` listens (127.0.0.1, 8080 unless said) and
+// feature. `program serve [port] [--no-script]` listens (127.0.0.1, 8080 unless said) and
 // keeps, for each browser that opens the page, the program's tree and a
 // model of its own on the server (skiff::web::Live): the page goes out as
 // one HTML stream that is never closed, what the browser does comes back as
 // a form posted into a hidden frame, and what that moved is appended to the
 // stream. No script: the page is the browser's own HTML and CSS
-// (Declarative Shadow DOM, a form, a frame).
+// (Declarative Shadow DOM, a form, a frame). Where the browser runs script,
+// a few lines of it make the same page better -- a press posted without
+// leaving the field, what is typed posted as it is typed -- unless
+// --no-script says the page is to have none.
 //
 //   GET  /                       the page, streamed; a session made for it
 //   POST /skiff/event?s=SESSION  a form posted from the page: 204
@@ -70,6 +73,7 @@ template <class A> struct Session {
 template <class A> struct Server {
   std::unordered_map<std::string, std::unique_ptr<Session<A>>> sessions;
   std::string css;
+  bool script = true;
 
   asio::awaitable<void> stream(beast::tcp_stream &socket, unsigned version) {
     const std::string name = sessionName();
@@ -79,6 +83,7 @@ template <class A> struct Server {
     typename Session<A>::Live::Options options;
     options.action = std::string(kEventPath) + "?s=" + name;
     options.css = css;
+    options.script = script;
     if constexpr (requires { A::hooks().head(); })
       options.head = std::string(A::hooks().head());
     session.page.emplace(skiff::ui::mount(skiff::ui::onPage, A::view()), session.model, std::move(options));
@@ -174,10 +179,15 @@ template <class A> [[nodiscard]] std::optional<int> run(int argc, char **argv) {
   const std::vector<std::string_view> args(argv + std::min(argc, 1), argv + argc);
   if (args.empty() || args.front() != "serve") return std::nullopt;
   std::uint16_t port = 8080;
-  if (args.size() > 1) {
-    const auto [end, ec] = std::from_chars(args[1].data(), args[1].data() + args[1].size(), port);
-    if (ec != std::errc{} || end != args[1].data() + args[1].size()) {
-      std::println(std::cerr, "skiff::app: not a port: {}", args[1]);
+  bool script = true;
+  for (const std::string_view arg : args | std::views::drop(1)) {
+    if (arg == "--no-script") {
+      script = false;
+      continue;
+    }
+    const auto [end, ec] = std::from_chars(arg.data(), arg.data() + arg.size(), port);
+    if (ec != std::errc{} || end != arg.data() + arg.size()) {
+      std::println(std::cerr, "skiff::app: not a port: {}", arg);
       return 2;
     }
   }
@@ -185,6 +195,7 @@ template <class A> [[nodiscard]] std::optional<int> run(int argc, char **argv) {
     A::hooks().dress();
   asio::io_context io;
   Server<A> server;
+  server.script = script;
   server.css = skiff::ui::themeCss(skiff::widgets::theme());
   if constexpr (requires { A::hooks().stylesheet(); })
     server.css += std::string(A::hooks().stylesheet());
