@@ -237,6 +237,19 @@ jobs:
           grep -q "index.wasm?v=$V" public/index.js || { echo "site: index.js does not name index.wasm by revision"; exit 1; }
           ls -la public
 
+      # The site in real browsers, as it is published: the page, and served
+      # both ways by the program in the service worker (test/browser).
+      - name: in real browsers
+        run: |
+          mkdir -p /tmp/site
+          cp -r public /tmp/site/skiff-framework
+          (cd /tmp/site && python3 -m http.server 8000 > /tmp/http.log 2>&1 &)
+          cd test/browser
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund playwright@1 > /dev/null
+          npx playwright install --with-deps chromium firefox > /dev/null
+          node browser.mjs http://127.0.0.1:8000/skiff-framework/
+
       # Kept for the next run, however this one went: what changed, built.
       - name: what the build was made from
         if: always()
