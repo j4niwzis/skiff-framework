@@ -15,15 +15,34 @@
     return text;
   };
   const pump = () => {
+    if (!Module.calledRun) return;
     for (const [id, port] of sessions) {
       const piece = taken(Module._skiff_loopback_next(id));
       if (piece) port.postMessage(piece);
     }
   };
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.addEventListener('message', (event) => {
+  // The program running: what is asked before then (a frame restored with
+  // the page, asking at once) waits for it.
+  const running = new Promise((resolve) => {
+    if (Module.calledRun) return resolve();
+    Module.postRun = [].concat(Module.postRun || [], [resolve]);
+  });
+  // A reload starts at the page: the switch and the frame as they were made,
+  // not as the browser restored them.
+  addEventListener('pageshow', () => {
+    const frame = document.getElementById('skiff-served');
+    const choice = document.getElementById('skiff-served-switch');
+    if (frame) {
+      frame.hidden = true;
+      frame.src = 'about:blank';
+    }
+    if (choice) choice.reset();
+  });
+  navigator.serviceWorker.addEventListener('message', async (event) => {
     const said = event.data;
     const port = event.ports[0];
+    await running;
     if (said.open) {
       const id = Module.ccall('skiff_loopback_open', 'number', ['number', 'string', 'string', 'string'],
                               [said.open.script ? 1 : 0, said.open.action, said.open.base, said.open.path]);
