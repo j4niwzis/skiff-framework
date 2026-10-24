@@ -102,44 +102,48 @@ inline constexpr std::array kPictureKinds{
 class paster {
  public:
   [[nodiscard]] std::vector<std::string> pictures() {
-    // Each kind fetched straight away (SDL_GetClipboardData): nothing where
-    // the clipboard does not offer it. Asked first with
-    // SDL_HasClipboardData, a picture crossed the X server twice -- X11's
-    // HasClipboardData is a whole GetClipboardData, thrown away -- each
-    // transfer one more chance for an owner's answer to time out.
-    // A picture itself, in one of the kinds read here.
-    // What SDL said as a fetch failed: on X11, "Selection timeout" where
-    // the owner took more than a second to answer -- and SDL then took the
-    // clipboard over itself.
-    sdl::SDL_ClearError();
-    for (const picture_kind& kind : kPictureKinds)
-      if (auto made = this->picture_of(kind))
-        return {std::move(*made)};
-    const std::string failed = sdl::SDL_GetError();
-    // Files a file manager copied: those that are pictures.
-    if (std::vector<std::string> files = this->uris(); !files.empty())
-      return files;
+    // What SDL was told the clipboard offers (on X11, its owner's answer to
+    // TARGETS): said with what went wrong where a picture was among it and
+    // none was pasted.
     std::size_t count = 0;
     char** offered = sdl::SDL_GetClipboardMimeTypes(&count);
     const std::vector<std::string> mimes =
         offered ? std::views::counted(offered, static_cast<std::ptrdiff_t>(count)) | std::views::transform([](const char* one) { return std::string(one); }) | std::ranges::to<std::vector>()
                 : std::vector<std::string>{};
     sdl::SDL_free(offered);
-    // Said where it was no text either: what SDL was told the clipboard
-    // offers (on X11, its owner's answer to TARGETS), or that it was told
-    // nothing.
-    if (std::ranges::none_of(mimes, [](const std::string& one) { return one.starts_with("text/") || one.ends_with("STRING"); }))
-      std::println(std::cerr, "[paste] nothing on the clipboard read as a picture; it offers: {}{}{}{}", mimes,
-                   mimes.empty() ? " (SDL was told of nothing)" : "", failed.empty() ? "" : "; SDL said: ", failed);
+    // Each kind fetched straight away (SDL_GetClipboardData): nothing where
+    // the clipboard does not offer it. Asked first with
+    // SDL_HasClipboardData, a picture crossed the X server twice -- X11's
+    // HasClipboardData is a whole GetClipboardData, thrown away.
+    // A picture itself, in one of the kinds read here.
+    for (const picture_kind& kind : kPictureKinds)
+      if (auto made = this->picture_of(kind, std::ranges::contains(mimes, std::string_view(kind.mime))))
+        return {std::move(*made)};
+    // Files a file manager copied: those that are pictures.
+    if (std::vector<std::string> files = this->uris(); !files.empty())
+      return files;
+    // Said at every Ctrl+V that pasted no picture, text ones too: a picture
+    // copied in another program pasted nothing and said nothing, the list
+    // holding text as well.
+    std::println(std::cerr, "[paste] nothing on the clipboard read as a picture; it offers: {}{}", mimes,
+                 mimes.empty() ? " (SDL was told of nothing)" : "");
     return {};
   }
 
  private:
-  std::optional<std::string> picture_of(const picture_kind& kind) {
+  // A kind's bytes, in a file of their own. Where the clipboard said it has
+  // the kind, what failed is said: SDL's fetch (on X11, "Selection timeout"
+  // where the owner took more than a second, after which SDL takes the
+  // clipboard over itself), or the file.
+  std::optional<std::string> picture_of(const picture_kind& kind, bool listed) {
     std::size_t size = 0;
+    sdl::SDL_ClearError();
     void* data = sdl::SDL_GetClipboardData(kind.mime, &size);
-    if (!data)
+    if (!data) {
+      if (listed)
+        std::println(std::cerr, "[paste] {} listed, but SDL gave nothing for it: {}", kind.mime, sdl::SDL_GetError());
       return std::nullopt;
+    }
     std::error_code failed;
     const std::filesystem::path folder = std::filesystem::temp_directory_path(failed) / "mux-pasted";
     std::filesystem::create_directories(folder, failed);
@@ -147,8 +151,11 @@ class paster {
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
     sdl::SDL_free(data);
-    if (!out)
+    if (!out) {
+      std::println(std::cerr, "[paste] {} bytes of {} not written to {}: {}", size, kind.mime, path.string(),
+                   failed ? failed.message() : std::string("the file did not open"));
       return std::nullopt;
+    }
     return path.string();
   }
   // The copied files' paths, each a picture by its name's extension.
