@@ -121,7 +121,7 @@ if(SKIFF_FRAMEWORK_APP)
       NAME skiff-widgets
       PROVIDES skiff-widgets skiff_widgets
       GITHUB_REPOSITORY j4niwzis/skiff-widgets
-      GIT_TAG ddb02cf49737b488a8f520761a46c41947c7ef58
+      GIT_TAG 635146bc60d5f326e05f9461595b431a85a41f53
       VERSION 0.1.0
     )
   endif()
@@ -157,6 +157,33 @@ if(SKIFF_FRAMEWORK_APP)
     set(skiff_framework_carry ${CMAKE_CURRENT_SOURCE_DIR}/src/carry.cc)
   endif()
 
+  # Live -- the page served by the program itself, the tree and a model for
+  # each browser kept on the server and the page a stream appended to as it
+  # moves (skiff.app.serve) -- is a feature too: it needs Boost (Asio, Beast)
+  # and a program that is only written out or only a page asks for none of
+  # it. Asked for as the feature (COMPONENTS live), or by hand
+  # (SKIFF_FRAMEWORK_LIVE); the framework's own build has it. Natively only.
+  if(COMMAND cme_port_feature)
+    cme_port_feature(skiff-framework live SUMMARY "skiff.app.serve: the page served live, its tree kept on the server, with no script")
+  endif()
+  set(skiff_framework_live_default ${PROJECT_IS_TOP_LEVEL})
+  if(DEFINED CME_FEATURES_skiff-framework AND "live" IN_LIST CME_FEATURES_skiff-framework)
+    set(skiff_framework_live_default ON)
+  endif()
+  option(SKIFF_FRAMEWORK_LIVE "skiff.app served live (program serve [port]), through Boost.Beast" ${skiff_framework_live_default})
+  set(skiff_framework_serve ${CMAKE_CURRENT_SOURCE_DIR}/src/serve_off.cc)
+  if(SKIFF_FRAMEWORK_LIVE AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    if(NOT TARGET Boost::beast)
+      if(COMMAND cme_find_package)
+        cme_find_package(Boost COMPONENTS asio beast REQUIRED)
+      else()
+        find_package(Boost REQUIRED COMPONENTS asio beast)
+      endif()
+    endif()
+    set(skiff_framework_serve ${CMAKE_CURRENT_SOURCE_DIR}/src/serve.cc)
+    set(skiff_framework_serves ON)
+  endif()
+
   # Under Emscripten every unit -- the std module CMake makes among them -- is
   # compiled with exceptions, or the std module is not one they can load: said
   # where the build is configured (CMAKE_CXX_FLAGS), not after.
@@ -166,13 +193,16 @@ if(SKIFF_FRAMEWORK_APP)
 
   add_library(skiff_framework STATIC)
   add_library(skiff::framework ALIAS skiff_framework)
-  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${skiff_framework_carry} ${skiff_framework_canvas})
+  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${skiff_framework_carry} ${skiff_framework_canvas} ${skiff_framework_serve})
   target_include_directories(skiff_framework PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
   set_target_properties(skiff_framework PROPERTIES EXPORT_NAME framework CXX_STANDARD 26)
   target_compile_features(skiff_framework PUBLIC cxx_std_26)
   target_link_libraries(skiff_framework PUBLIC skiff::ui)
   if(SKIFF_FRAMEWORK_SSR)
     target_link_libraries(skiff_framework PUBLIC knot)
+  endif()
+  if(skiff_framework_serves)
+    target_link_libraries(skiff_framework PUBLIC Boost::asio Boost::beast)
   endif()
 endif()
 
@@ -201,7 +231,7 @@ if(skiff_framework_has_window)
         NAME skiff-widgets
         PROVIDES skiff-widgets skiff_widgets
         GITHUB_REPOSITORY j4niwzis/skiff-widgets
-        GIT_TAG ddb02cf49737b488a8f520761a46c41947c7ef58
+        GIT_TAG 635146bc60d5f326e05f9461595b431a85a41f53
         VERSION 0.1.0
       )
     endif()

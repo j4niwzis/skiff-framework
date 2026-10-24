@@ -80,6 +80,24 @@ feature, `canvas` (`cme_find_package(skiff-framework COMPONENTS canvas)`, or
 page alone: no canvas and none of its JavaScript, and skiff's scene and nodes
 are not compiled at all (unless the native window needs them).
 
+## Served live, with no script
+
+The `live` feature (`COMPONENTS live`, or `-DSKIFF_FRAMEWORK_LIVE=ON`; natively, through Boost.Beast) adds `program serve [port]`.
+The program serves its page itself (`skiff.app.serve`), keeping the tree and a model on the server for each browser.
+The browser gets one HTML stream that is never closed and only ever appended to, with no JavaScript and no WebAssembly:
+
+- **Generation.** The tree's containers are written into a Declarative Shadow DOM, with a `<slot>` for each leaf and for each list's rows.
+- **Islands.** Each leaf, and each list row with everything in it, is an element sent to its slot. When one changes, it is sent again as a new version and a stylesheet hides the old one. A row that is removed is hidden; a new row is sent and placed by its `order`.
+  Any other change (a container's own element, or a row inserted between others) is sent as a new generation, and the old generation is hidden.
+- **Events.** What is done on the page comes back as a form posted into a hidden frame (the server answers 204):
+  - a press is the submit button that was pressed (a clickable element that isn't a button is wrapped in one);
+  - every field is posted with it, under its node, part and version.
+
+  A text field's value goes with the next press, or with Enter.
+- **Heartbeat.** A quiet stream is kept alive by one every 25 s.
+
+The machinery is `skiff::web::Live` in skiff. A canvas of the page's own needs script, so it stays blank here.
+
 ## The window
 
 `skiff.platform.window` (`src/platform/`): skiff's scene in a window of the

@@ -129,7 +129,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++-23 \
             -DCMAKE_CXX_FLAGS="-stdlib=libstdc++" \
             -DCMAKE_CXX_STDLIB_MODULES_JSON=/tmp/libstdc++.modules.json \
-            -DSKIFF_FRAMEWORK_CANVAS=OFF -DSKIFF_FRAMEWORK_SSR=OFF \
+            -DSKIFF_FRAMEWORK_CANVAS=OFF -DSKIFF_FRAMEWORK_SSR=OFF -DSKIFF_FRAMEWORK_LIVE=OFF \
             -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
           grep -q "^SKIFF_UI:BOOL=OFF" build/page/CMakeCache.txt
           cmake --build build/page --target skiff_framework_page_test -- -k 0
@@ -149,6 +149,15 @@ jobs:
           build/native/skiff_framework_state_test
           cmake --build build/native --target skiff_framework_page_test -- -k 0
           (cd build/native && ctest -R page --output-on-failure)
+          # Served live: the page streamed, a generation of it in the first piece.
+          build/native/skiff_framework_page_test serve 8099 &
+          server=$!
+          sleep 2
+          curl -sN --max-time 3 http://127.0.0.1:8099/ > /tmp/live.html || true
+          kill $server
+          head -c 2000 /tmp/live.html
+          grep -q '<skiff-live id="skiff-g1"><template shadowrootmode="open">' /tmp/live.html
+          grep -q 'A page, and a canvas in it' /tmp/live.html
           std=$(grep -oE 'cmake_cxx_std[^/ ]*\.dir' build/native/build.ninja | sort -u)
           echo "$std"
           test "$(echo "$std" | wc -l)" = 1

@@ -33,6 +33,11 @@
 // browser alone -- nothing travels, and the page is made where nothing was
 // written before it.
 //
+// With the live feature, natively, `program serve [port]` serves the page
+// live instead (skiff.app.serve): the tree and a model for each browser kept
+// on the server, the page one HTML stream appended to as the model moves,
+// what is done on it posted back as a form -- no script, no WebAssembly.
+//
 // Without the canvas feature -- a frontend, whose page is the browser's
 // elements and nothing else -- there is no scene in the build at all: no
 // canvas, none of its JavaScript, and skiff's scene and nodes not compiled;
@@ -47,6 +52,7 @@ export import skiff.ui;
 import std;
 import skiff.app.carry;
 import skiff.app.canvas;
+import skiff.app.serve;
 
 #ifdef __EMSCRIPTEN__
 // ---- the page's side, in JavaScript ---------------------------------------
@@ -280,6 +286,10 @@ template <auto View, class Hooks = NoHooks> struct App {
     (void)argv;
     return live();
 #else
+    // Served live, where the framework has its live feature and the
+    // program is asked to (`program serve [port]`, skiff.app.serve); else
+    // the page written out.
+    if (const std::optional<int> served = skiff::app::serve::run<App>(argc, argv)) return *served;
     return prerender(argc, argv);
 #endif
   }
