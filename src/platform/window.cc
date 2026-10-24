@@ -666,7 +666,17 @@ int run(App& app, const options& how, const events::kinds& kinds) {
         break;
       // Held long enough where it went down: what is under it lets go of the
       // gesture, and it is pressed and let go of with the right button.
-      if (held && !held->fired && detail::now_ms() - held->since >= kHoldMs) {
+      // Not where the pointer's own moves or lift are still to be read: the
+      // program's work -- a sync's changes applied, two seconds of them on
+      // a phone -- kept the loop from reading them, and a tap whose lift came
+      // within the half second was made a right press there, a Copy menu
+      // at every tap (the tester's). Read first, as they are, next time round.
+      const auto pointer_waiting = [] {
+        sdl::SDL_PumpEvents();
+        sdl::SDL_Event waiting{};
+        return sdl::SDL_PeepEvents(&waiting, 1, sdl::SDL_PEEKEVENT, sdl::SDL_EVENT_MOUSE_MOTION, sdl::SDL_EVENT_MOUSE_BUTTON_UP) > 0;
+      };
+      if (held && !held->fired && detail::now_ms() - held->since >= kHoldMs && !pointer_waiting()) {
         held->fired = true;
         router.pointer(skiff::scene::pointer::down{held->x, held->y, sdl::kButtonRight});
         router.pointer(skiff::scene::pointer::up{held->x, held->y, sdl::kButtonRight});
