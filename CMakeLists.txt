@@ -168,7 +168,8 @@ if(SKIFF_FRAMEWORK_WINDOW AND skiff_framework_platform IN_LIST skiff_framework_w
   # Source overlays, by platform: for foo.cc, a foo_<platform>.cc replaces it
   # on that platform (one may name several: foo_linux_windows_macos.cc), and
   # only this platform's enter the build -- no source says #if about one.
-  set(skiff_framework_overlay "_(${skiff_framework_window_platforms})(_(${skiff_framework_window_platforms}))*\\.cc$")
+  list(JOIN skiff_framework_window_platforms "|" skiff_framework_platform_names)
+  set(skiff_framework_overlay "_(${skiff_framework_platform_names})(_(${skiff_framework_platform_names}))*\\.cc$")
   file(GLOB skiff_framework_platform_all CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/*.cc")
   set(skiff_framework_platform_sources)
   foreach(source IN LISTS skiff_framework_platform_all)
@@ -184,7 +185,7 @@ if(SKIFF_FRAMEWORK_WINDOW AND skiff_framework_platform IN_LIST skiff_framework_w
     set(replaced FALSE)
     foreach(overlay IN LISTS overlays)
       get_filename_component(overlay_name "${overlay}" NAME)
-      string(REGEX REPLACE "(_(${skiff_framework_window_platforms}))+\\.cc$" ".cc" common "${overlay_name}")
+      string(REGEX REPLACE "(_(${skiff_framework_platform_names}))+\\.cc$" ".cc" common "${overlay_name}")
       if(common STREQUAL name AND overlay_name MATCHES "_${skiff_framework_platform}(_|\\.cc$)")
         set(replaced TRUE)
       endif()
