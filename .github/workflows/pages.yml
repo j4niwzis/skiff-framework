@@ -176,8 +176,17 @@ jobs:
           # that kept the last index.js would load it with the new index.wasm,
           # and their imports would not match.
           V=${GITHUB_SHA::12}
-          # Quoted or not, as Emscripten's minifier leaves it.
-          sed -E -i "s#<script async src=\"?index.js\"?>#<script async src=\"index.js?v=$V\">#" public/index.html
+          # However Emscripten's minifier wrote the tag (async or not, quoted
+          # or not, its attributes in any order): its src named by revision.
+          grep -o '<script[^>]*index\.js[^>]*>' public/index.html || true
+          python3 - "$V" <<'PY'
+          import re, sys, pathlib
+          page = pathlib.Path('public/index.html')
+          text = page.read_text()
+          made, count = re.subn(r'(<script[^>]*?\bsrc=)(["\']?)index\.js\2', lambda m: m.group(1) + '"index.js?v=' + sys.argv[1] + '"', text)
+          print('index.js named by revision in', count, 'tag(s)')
+          page.write_text(made)
+          PY
           sed -i "s#locateFile(\"index.wasm\")#locateFile(\"index.wasm?v=$V\")#" public/index.js
           grep -q "index.js?v=$V" public/index.html || { echo "site: index.html does not name index.js by revision"; exit 1; }
           grep -q "index.wasm?v=$V" public/index.js || { echo "site: index.js does not name index.wasm by revision"; exit 1; }
