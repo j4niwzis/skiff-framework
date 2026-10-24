@@ -457,8 +457,10 @@ inline constexpr std::string_view kLorem =
   return t;
 }
 auto breathing() {
-  return state<Clock>(row(hbox(0.0f, {.fillX = true, .height = 400.0f, .border = scene::Border{colour::kPaper, 2.0f}}),
-             spec_for<Clock>(LeftLook{}, row(hbox(0.0f, {}), lorem())), spec_for<Clock>(RightLook{}, row(hbox(0.0f, {}), lorem()))));
+  // The browser's own (a client): served, it moves where it is shown, at
+  // the browser's frames -- the server sends nothing for it.
+  return skiff::ui::client(state<Clock>(row(hbox(0.0f, {.fillX = true, .height = 400.0f, .border = scene::Border{colour::kPaper, 2.0f}}),
+             spec_for<Clock>(LeftLook{}, row(hbox(0.0f, {}), lorem())), spec_for<Clock>(RightLook{}, row(hbox(0.0f, {}), lorem())))));
 }
 
 auto motion() {
@@ -581,7 +583,9 @@ struct Hooks {
         return s;
       }));
   }
-  void frame(Model &m, double seconds) { (void)m.apply(model::over<Clock>(model::setTo(Clock{seconds}))); }
+  // Any model with the clock: the page's, and the boxes' own where they are
+  // the browser's (served).
+  template <class M> void frame(M &m, double seconds) { (void)m.apply(model::over<Clock>(model::setTo(Clock{seconds}))); }
   [[nodiscard]] bool onCanvas(const Model &m) const { return m.look<Shown>()->backend == Backend::kScene; }
   [[nodiscard]] bool outlineRepaints(const Model &m) const { return m.look<Repaints>()->shown; }
   [[nodiscard]] std::string_view stylesheet() const { return kSiteCss; }

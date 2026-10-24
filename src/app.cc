@@ -389,6 +389,7 @@ template <auto View, class Hooks = NoHooks> struct App {
       skiff::web::forEachClient(*served(), [](auto &one) {
         if (one.element() != skiff::web::dom::kNone) one.client().refresh();
       });
+      loop(kFrames);
     } else if (page()) {
       ticker().step(model());
       runner().step(model());
@@ -406,11 +407,34 @@ template <auto View, class Hooks = NoHooks> struct App {
     }
     skiffAppSettled();
   }
+  // The frame hook, at a frame: the program's model, and each client's own
+  // where the hook takes it -- on the page, and served (where the browser
+  // runs the clients alone).
+  static void frameAll(double seconds) {
+    const auto clients = [&](auto &tree) {
+      skiff::web::forEachClient(tree, [&](auto &one) {
+        if constexpr (requires { hooks().frame(one.model(), seconds); })
+          if (one.element() != skiff::web::dom::kNone) hooks().frame(one.model(), seconds);
+      });
+    };
+    if (served()) {
+      clients(*served());
+      return;
+    }
+    hooks().frame(model(), seconds);
+    if (page()) clients(page()->root());
+  }
   // The frame, while there is one: the frame hook, the canvas drawn.
   static void tick() {
     const double now = emscripten_get_now();
     if constexpr (kFrames)
-      hooks().frame(model(), (now - startedAt()) / 1000.0);
+      frameAll((now - startedAt()) / 1000.0);
+    if (served()) {
+      skiff::web::forEachClient(*served(), [](auto &one) {
+        if (one.element() != skiff::web::dom::kNone) one.client().refresh();
+      });
+      return;
+    }
     ticker().step(model());
     runner().step(model());
     keeper().save(model());
@@ -458,6 +482,7 @@ template <auto View, class Hooks = NoHooks> struct App {
       hooks().dress();
     served().emplace(skiff::ui::mount(skiff::ui::onPage, View()));
     skiff::web::numberClients(*served());
+    startedAt() = emscripten_get_now();
     settle();
     return 0;
   }
@@ -504,6 +529,10 @@ template <auto View, class Hooks = NoHooks> struct App {
     if constexpr (requires { hooks().head(); })
       options.head += std::string(hooks().head());
     options.script = script != 0;
+    // With script, the program itself in the page served, for the parts
+    // that are the browser's own (clients): the same index.js, beside where
+    // it is served from.
+    if (options.script) options.head += "<script async src=\"../index.js\"></script>\n";
     skiff::app::route::Router<Model> router;
     (void)router.arrive(one.model, path);
     one.page.emplace(skiff::ui::mount(skiff::ui::onPage, View()), one.model, std::move(options));

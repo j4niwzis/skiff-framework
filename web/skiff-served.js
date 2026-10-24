@@ -43,7 +43,10 @@
   // Taken as the program settles -- an answer come, a request's time to be
   // tried again -- not looked for at intervals.
   window.addEventListener('skiff-settled', pump);
-  const ready = navigator.serviceWorker.register('skiff-sw.js').then(() => navigator.serviceWorker.ready);
+  // Where the page may not run a service worker (a policy against it, a
+  // private window): the switch says so, rather than showing nothing.
+  const ready = navigator.serviceWorker.register('skiff-sw.js').then(() => navigator.serviceWorker.ready)
+    .then(() => null, (failed) => String((failed && failed.message) || failed));
   window.skiff = window.skiff || {};
   window.skiff.served = {
     async show(mode) {
@@ -54,7 +57,14 @@
         frame.src = 'about:blank';
         return;
       }
-      await ready;
+      const refused = await ready;
+      if (refused) {
+        frame.srcdoc = '<p style="font:15px system-ui;padding:24px">The page cannot be served here: its service worker could not start (' +
+          refused.replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;')) + ').</p>';
+        frame.hidden = false;
+        return;
+      }
+      frame.removeAttribute('srcdoc');
       frame.src = 'served/?script=' + (mode === 'js' ? '1' : '0') + '&at=' + Date.now();
       frame.hidden = false;
     },

@@ -199,7 +199,7 @@ if(SKIFF_FRAMEWORK_APP)
       NAME skiff-widgets
       PROVIDES skiff-widgets skiff_widgets
       GITHUB_REPOSITORY j4niwzis/skiff-widgets
-      GIT_TAG 453c56bcaf00f8ba1117b16319ced0a7756139e4
+      GIT_TAG 84bea9c0675d49f589fccdd2a68884a50ac1a204
       VERSION 0.1.0
     )
   endif()
@@ -287,7 +287,7 @@ if(skiff_framework_has_window)
         NAME skiff-widgets
         PROVIDES skiff-widgets skiff_widgets
         GITHUB_REPOSITORY j4niwzis/skiff-widgets
-        GIT_TAG 453c56bcaf00f8ba1117b16319ced0a7756139e4
+        GIT_TAG 84bea9c0675d49f589fccdd2a68884a50ac1a204
         VERSION 0.1.0
       )
     endif()
@@ -379,6 +379,10 @@ if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND NOT CMAKE_SYSTEM_NAME STREQU
   set_target_properties(skiff_framework_timer_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
   target_link_libraries(skiff_framework_timer_test PRIVATE skiff::framework)
   add_test(NAME timer COMMAND skiff_framework_timer_test)
+  add_executable(skiff_framework_todo_live_test test/todo_live.cc)
+  set_target_properties(skiff_framework_todo_live_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
+  target_link_libraries(skiff_framework_todo_live_test PRIVATE skiff::framework)
+  add_test(NAME todo_live COMMAND skiff_framework_todo_live_test)
 endif()
 
 # The network's runner, with a transport of the test's own (test/net.cc).

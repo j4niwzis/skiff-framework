@@ -28,6 +28,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Clang 23 and the distribution's libstdc++, for the native program.
       - name: clang 23
@@ -65,11 +67,48 @@ jobs:
           }
           EOF
 
+      # Emscripten, as the last run left it (its sysroot's libraries built
+      # once): installed only where it is not.
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/emsdk
+          key: emsdk-6.0.13-${{ runner.os }}
       - name: Emscripten
         run: |
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git /tmp/emsdk
-          /tmp/emsdk/emsdk install 6.0.13
+          if [ ! -x /tmp/emsdk/emsdk ]; then
+            git clone --depth 1 https://github.com/emscripten-core/emsdk.git /tmp/emsdk
+            /tmp/emsdk/emsdk install 6.0.13
+          fi
           /tmp/emsdk/emsdk activate 6.0.13
+
+      # Which build of the compiler this is: apt.llvm.org's clang 23 is a
+      # nightly, and a module file is read only by the build that made it.
+      - name: the compiler's build
+        run: echo "COMPILER_BUILD=$( (clang++-23 --version; /tmp/emsdk/upstream/bin/clang++ --version) | sha256sum | cut -c1-12)" >> "$GITHUB_ENV"
+      # The builds and the fetched sources the last run kept: as mux keeps
+      # them, in one job here -- the build is short.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            build
+            ~/.cache/cmake-everywhere
+          key: build-${{ runner.os }}-${{ env.COMPILER_BUILD }}-${{ github.sha }}
+          restore-keys: build-${{ runner.os }}-${{ env.COMPILER_BUILD }}-
+      # ninja goes by file times: a source changed since the build restored
+      # was made -- its hash other than the list the build keeps -- gets the
+      # time this run began; the rest, an old one.
+      - name: file times against the build restored
+        run: |
+          mkdir -p build
+          began=$(date +%s)
+          git ls-files -z | xargs -0 touch -d "@1000000000"
+          if [ -f build/sources.sha1 ]; then
+            git ls-files -z | xargs -0 sha1sum | sort > /tmp/sources-now.sha1
+            sort build/sources.sha1 | comm -13 - /tmp/sources-now.sha1 | cut -c43- > build/changed-sources
+          else
+            git ls-files > build/changed-sources
+          fi
+          tr '\n' '\0' < build/changed-sources | xargs -0 -r touch -d "@$began"
 
       # views::enumerate is libc++ 23's, and Emscripten's libc++ is 22: the
       # view, from the libc++ 23 that came with clang 23, put into
@@ -148,8 +187,8 @@ jobs:
           cmake --build build/native --target skiff_framework_state_test -- -k 0
           build/native/skiff_framework_state_test
           cmake --build build/native --target skiff_framework_page_test -- -k 0
-          cmake --build build/native --target skiff_framework_net_test skiff_framework_net_native_test skiff_framework_route_test skiff_framework_timer_test -- -k 0
-          (cd build/native && ctest -R "net|route|timer" --output-on-failure)
+          cmake --build build/native --target skiff_framework_net_test skiff_framework_net_native_test skiff_framework_route_test skiff_framework_timer_test skiff_framework_todo_live_test -- -k 0
+          (cd build/native && ctest -R "net|route|timer|todo" --output-on-failure)
           (cd build/native && ctest -R page --output-on-failure)
           # Served live: the page streamed, a generation of it in the first piece.
           build/native/skiff_framework_page_test serve 8099 &
@@ -191,6 +230,18 @@ jobs:
           grep -q "index.js?v=$V" public/index.html || { echo "site: index.html does not name index.js by revision"; exit 1; }
           grep -q "index.wasm?v=$V" public/index.js || { echo "site: index.js does not name index.wasm by revision"; exit 1; }
           ls -la public
+
+      # Kept for the next run, however this one went: what changed, built.
+      - name: what the build was made from
+        if: always()
+        run: git ls-files -z | xargs -0 sha1sum | sort > build/sources.sha1
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            build
+            ~/.cache/cmake-everywhere
+          key: build-${{ runner.os }}-${{ env.COMPILER_BUILD }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
