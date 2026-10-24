@@ -187,8 +187,8 @@ jobs:
           cmake --build build/native --target skiff_framework_state_test -- -k 0
           build/native/skiff_framework_state_test
           cmake --build build/native --target skiff_framework_page_test -- -k 0
-          cmake --build build/native --target skiff_framework_net_test skiff_framework_net_native_test skiff_framework_route_test skiff_framework_timer_test skiff_framework_todo_live_test -- -k 0
-          (cd build/native && ctest -R "net|route|timer|todo" --output-on-failure)
+          cmake --build build/native --target skiff_framework_net_test skiff_framework_net_native_test skiff_framework_route_test skiff_framework_timer_test skiff_framework_todo_live_test skiff_framework_switch_test -- -k 0
+          (cd build/native && ctest -R "net|route|timer|todo|switch" --output-on-failure)
           (cd build/native && ctest -R page --output-on-failure)
           # Served live: the page streamed, a generation of it in the first piece.
           build/native/skiff_framework_page_test serve 8099 &
@@ -212,6 +212,9 @@ jobs:
           ls -la build/wasm/site/index.wasm build/wasm/site/client.wasm
           # The page as its own server: its service worker and the page's side.
           cp web/skiff-sw.js web/skiff-served.js public/
+          # And what the network answers under served/ where the worker
+          # does not: back to the page, and the keep-alive -- not a 404.
+          cp -r web/served public/
           build/native/site/site public/static.html public/index.html
           # The script and the WebAssembly named by this revision: a browser
           # that kept the last index.js would load it with the new index.wasm,

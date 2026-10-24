@@ -199,7 +199,7 @@ if(SKIFF_FRAMEWORK_APP)
       NAME skiff-widgets
       PROVIDES skiff-widgets skiff_widgets
       GITHUB_REPOSITORY j4niwzis/skiff-widgets
-      GIT_TAG 9c3bb3f7ba07227baafccb277326f7c37bd62e22
+      GIT_TAG 67628974d14d88457500658b713238ad812bcdf5
       VERSION 0.1.0
     )
   endif()
@@ -287,7 +287,7 @@ if(skiff_framework_has_window)
         NAME skiff-widgets
         PROVIDES skiff-widgets skiff_widgets
         GITHUB_REPOSITORY j4niwzis/skiff-widgets
-        GIT_TAG 9c3bb3f7ba07227baafccb277326f7c37bd62e22
+        GIT_TAG 67628974d14d88457500658b713238ad812bcdf5
         VERSION 0.1.0
       )
     endif()
@@ -394,6 +394,10 @@ if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND NOT CMAKE_SYSTEM_NAME STREQU
   set_target_properties(skiff_framework_timer_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
   target_link_libraries(skiff_framework_timer_test PRIVATE skiff::framework)
   add_test(NAME timer COMMAND skiff_framework_timer_test)
+  add_executable(skiff_framework_switch_test test/switch.cc)
+  set_target_properties(skiff_framework_switch_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
+  target_link_libraries(skiff_framework_switch_test PRIVATE skiff::framework)
+  add_test(NAME switch COMMAND skiff_framework_switch_test)
   add_executable(skiff_framework_todo_live_test test/todo_live.cc)
   set_target_properties(skiff_framework_todo_live_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
   target_link_libraries(skiff_framework_todo_live_test PRIVATE skiff::framework)
