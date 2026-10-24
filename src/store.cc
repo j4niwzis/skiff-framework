@@ -23,6 +23,9 @@ import knot;
 import skiff.model;
 
 #ifdef __EMSCRIPTEN__
+// What the script below uses of Emscripten's library, said: not
+// included unless something says it is needed (callMain failed on it).
+EM_JS_DEPS(skiff_store, "$stringToNewUTF8,$UTF8ToString");
 // clang-format off
 EM_JS(char *, skiffStoreRead, (const char *key), {
   try {

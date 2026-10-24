@@ -66,6 +66,9 @@ import skiff.app.store;
 // ---- the page's side, in JavaScript ---------------------------------------
 // A link followed, and the state the page was written with. The canvas's
 // own is skiff.app.canvas's.
+// What the script below uses of Emscripten's library, said: not
+// included unless something says it is needed (callMain failed on it).
+EM_JS_DEPS(skiff_app, "$stringToNewUTF8,$UTF8ToString");
 // clang-format off
 EM_JS(void, skiffAppOpen, (const char *href, int length), { window.location.href = UTF8ToString(href, length); });
 // The state the page was written with, where it carries one: its text, made

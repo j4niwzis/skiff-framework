@@ -36,6 +36,9 @@ import skiff.model;
 // Each request by its ticket: begun, and its outcome kept until it is taken
 // -- the status (0: it did not reach the server, or timed out), the body or
 // why it failed, and what Retry-After said.
+// What the script below uses of Emscripten's library, said: not
+// included unless something says it is needed (callMain failed on it).
+EM_JS_DEPS(skiff_net, "$stringToNewUTF8,$UTF8ToString");
 // clang-format off
 EM_JS(void, skiffNetStart, (double ticket, const char *method, const char *url, const char *body, int bodyLength,
                             const char *type, const char *headers, int timeoutMs), {
