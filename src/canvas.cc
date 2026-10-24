@@ -50,7 +50,7 @@ EM_JS(void, skiffAppCanvasMake, (), {
 });
 EM_JS(void, skiffAppShowPage, (int on), {
   const page = document.getElementById('skiff');
-  if (page) page.style.display = on ? '' : 'none';
+  if (page) page.style.display = on ? "" : "none";
 });
 EM_JS(void, skiffAppShowCanvas, (int on), {
   const host = document.getElementById('skiff-canvas-host');

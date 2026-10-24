@@ -84,7 +84,7 @@ EM_JS(char *, skiffAppPath, (), {
 EM_JS(void, skiffAppPush, (const char *path, int replace), {
   const url = new URL(UTF8ToString(path), document.baseURI);
   if (url.href === location.href) return;
-  if (replace) history.replaceState({skiff: 1}, '', url); else history.pushState({skiff: 1}, '', url);
+  if (replace) history.replaceState({skiff: 1}, "", url); else history.pushState({skiff: 1}, "", url);
 });
 // And the program following the address bar: back and forward, and a link
 // to one of its routes clicked -- taken by the program, not the browser.
