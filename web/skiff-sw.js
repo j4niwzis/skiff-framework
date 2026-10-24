@@ -1,21 +1,40 @@
-// skiff's server in the browser: a service worker that answers what is asked
-// under ./served/ as skiff.app.serve would -- the page's stream, and the forms
-// posted from it -- with the page's own program doing the server's part
-// (skiff.app's loopback, through skiff-served.js in the page). With it, the
-// page served live, with script or without, is seen with no server at all.
+// skiff's server in the browser: a service worker that is the server -- the
+// program itself loaded here (index.js, its main not run), its sessions of
+// the page kept here (skiff.app's loopback) -- answering what is asked under
+// ./served/ as skiff.app.serve would: the page's stream, and the forms posted
+// from it. The page served, with script or without, opens as a page of its
+// own, with no server and no other page behind it.
 //
 //   GET  served/PATH?script=0|1  the page at that path, streamed: a session made for it
 //   POST served/skiff/event?s=N  a form posted from it: 204
 'use strict';
 
+// The program, of the same revision as this worker.
+const version = new URL(self.location.href).searchParams.get('v');
+self.Module = {noInitialRun: true, print() {}, printErr(said) { console.warn(said); }};
+const running = new Promise((resolve) => { self.Module.onRuntimeInitialized = resolve; });
+importScripts('index.js' + (version ? '?v=' + version : ''));
+
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
-// The page that runs the program: the window that is not itself served.
-const host = async () => {
-  const all = await self.clients.matchAll({type: 'window', includeUncontrolled: true});
-  return all.find((one) => !new URL(one.url).pathname.includes('/served/'));
+const encoder = new TextEncoder();
+const sessions = new Map();  // session -> its stream's controller
+// A piece the program handed out: read, and freed.
+const taken = (at) => {
+  if (!at) return '';
+  const text = Module.UTF8ToString(at);
+  Module._free(at);
+  return text;
 };
+const pump = () => {
+  for (const [id, stream] of sessions) {
+    const piece = taken(Module._skiff_loopback_next(id));
+    if (piece) stream.enqueue(encoder.encode(piece));
+  }
+};
+// Taken as the program settles -- an answer come, a timer gone off.
+self.addEventListener('skiff-settled', pump);
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
@@ -25,13 +44,10 @@ self.addEventListener('fetch', (event) => {
   const base = url.pathname.slice(0, at) + '/served/';
   if (event.request.method === 'POST' && rest === 'skiff/event') {
     event.respondWith((async () => {
-      const page = await host();
-      if (!page) return new Response('no page to serve it', {status: 503});
+      await running;
       const body = await event.request.text();
-      const channel = new MessageChannel();
-      const done = new Promise((resolve) => { channel.port1.onmessage = () => resolve(); });
-      page.postMessage({post: Number(url.searchParams.get('s')), body}, [channel.port2]);
-      await done;
+      Module.ccall('skiff_loopback_post', null, ['number', 'string'], [Number(url.searchParams.get('s')), body]);
+      pump();
       return new Response(null, {status: 204});
     })());
     return;
@@ -39,20 +55,22 @@ self.addEventListener('fetch', (event) => {
   // Any other page under it: the page at that path (the program's route).
   if (event.request.method === 'GET' && !rest.startsWith('skiff/')) {
     event.respondWith((async () => {
-      const page = await host();
-      if (!page) return new Response('no page to serve it', {status: 503});
-      const channel = new MessageChannel();
-      const encoder = new TextEncoder();
-      // The stream: each piece the program hands out, as it comes; closed
-      // when the frame showing it goes, and the session with it.
+      await running;
+      const script = url.searchParams.get('script') !== '0';
+      const id = Module.ccall('skiff_loopback_open', 'number', ['number', 'string', 'string', 'string'],
+                              [script ? 1 : 0, base + 'skiff/event', base, rest === 'index.html' ? '' : rest]);
+      // The stream: what the program hands out, as it comes; its session
+      // let go with it.
       const stream = new ReadableStream({
         start(controller) {
-          channel.port1.onmessage = (message) => controller.enqueue(encoder.encode(message.data));
+          sessions.set(id, controller);
+          controller.enqueue(encoder.encode(taken(Module._skiff_loopback_begin(id))));
         },
-        cancel() { channel.port1.postMessage('close'); },
+        cancel() {
+          sessions.delete(id);
+          Module._skiff_loopback_close(id);
+        },
       });
-      const path = rest === 'index.html' ? '' : rest;
-      page.postMessage({open: {script: url.searchParams.get('script') !== '0', action: base + 'skiff/event', base, path}}, [channel.port2]);
       return new Response(stream, {headers: {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'}});
     })());
   }

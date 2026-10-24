@@ -585,6 +585,16 @@ struct Hooks {
   }
   // Any model with the clock: the page's, and the boxes' own where they are
   // the browser's (served).
+  // First on a page the site serves itself (the served switch): the way to
+  // each of its forms, as links -- no script needed to go back.
+  [[nodiscard]] std::string servedLead(bool script) const {
+    const auto link = [](std::string_view mode, std::string_view label, bool here) {
+      return std::format(R"(<a href="../?mode={}" style="color:#fff;{}">{}</a>)", mode, here ? "font-weight:700" : "opacity:.8", label);
+    };
+    return R"(<nav style="position:fixed;right:12px;bottom:12px;z-index:10;display:flex;gap:12px;padding:8px 12px;)"
+           R"(border-radius:10px;background:rgba(20,30,40,.88);font:13px system-ui,sans-serif">)" +
+           link("page", "page", false) + link("nojs", "served, no JS", !script) + link("js", "served, JS", script) + "</nav>\n";
+  }
   template <class M> void frame(M &m, double seconds) { (void)m.apply(model::over<Clock>(model::setTo(Clock{seconds}))); }
   [[nodiscard]] bool onCanvas(const Model &m) const { return m.look<Shown>()->backend == Backend::kScene; }
   [[nodiscard]] bool outlineRepaints(const Model &m) const { return m.look<Repaints>()->shown; }

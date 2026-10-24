@@ -85,6 +85,7 @@ EM_JS(char *, skiffAppPath, (), {
 });
 // The address bar following the program: a route gone to, said.
 EM_JS(void, skiffAppPush, (const char *path, int replace), {
+  if (typeof document === "undefined") return;  // a worker: no address bar
   const url = new URL(UTF8ToString(path), document.baseURI);
   if (url.href === location.href) return;
   if (replace) history.replaceState({skiff: 1}, "", url); else history.pushState({skiff: 1}, "", url);
@@ -118,7 +119,7 @@ EM_JS(void, skiffAppWakeIn, (int ms), {
 });
 // The page's own script told the program has settled: what it serves from
 // the program (skiff-served.js) is taken then.
-EM_JS(void, skiffAppSettled, (), { queueMicrotask(() => window.dispatchEvent(new Event('skiff-settled'))); });
+EM_JS(void, skiffAppSettled, (), { queueMicrotask(() => globalThis.dispatchEvent(new Event("skiff-settled"))); });
 EM_JS(char *, skiffAppStateText, (), {
   const kept = document.getElementById('skiff-state');
   return kept ? stringToNewUTF8(kept.textContent) : 0;
@@ -533,6 +534,10 @@ template <auto View, class Hooks = NoHooks> struct App {
     // that are the browser's own (clients): the same index.js, beside where
     // it is served from.
     if (options.script) options.head += "<script async src=\"../index.js\"></script>\n";
+    // What the program puts first on a page it serves (Hooks::servedLead):
+    // a way back to the page, say.
+    if constexpr (requires { hooks().servedLead(options.script); })
+      options.lead = std::string(hooks().servedLead(options.script));
     skiff::app::route::Router<Model> router;
     (void)router.arrive(one.model, path);
     one.page.emplace(skiff::ui::mount(skiff::ui::onPage, View()), one.model, std::move(options));

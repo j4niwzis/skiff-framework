@@ -222,7 +222,7 @@ jobs:
           import re, sys, pathlib
           page = pathlib.Path('public/index.html')
           text = page.read_text()
-          made, count = re.subn(r'(<script[^>]*?\bsrc=)(["\']?)index\.js\2', lambda m: m.group(1) + '"index.js?v=' + sys.argv[1] + '"', text)
+          made, count = re.subn(r'(<script[^>]*?\bsrc=)(["\']?)(index|skiff-served)\.js\2', lambda m: m.group(1) + '"' + m.group(3) + '.js?v=' + sys.argv[1] + '"', text)
           print('index.js named by revision in', count, 'tag(s)')
           page.write_text(made)
           PY
