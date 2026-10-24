@@ -174,7 +174,8 @@ jobs:
           # that kept the last index.js would load it with the new index.wasm,
           # and their imports would not match.
           V=${GITHUB_SHA::12}
-          sed -i "s#<script async src=index.js>#<script async src=\"index.js?v=$V\">#" public/index.html
+          # Quoted or not, as Emscripten's minifier leaves it.
+          sed -E -i "s#<script async src=\"?index.js\"?>#<script async src=\"index.js?v=$V\">#" public/index.html
           sed -i "s#locateFile(\"index.wasm\")#locateFile(\"index.wasm?v=$V\")#" public/index.js
           grep -q "index.js?v=$V" public/index.html || { echo "site: index.html does not name index.js by revision"; exit 1; }
           grep -q "index.wasm?v=$V" public/index.js || { echo "site: index.js does not name index.wasm by revision"; exit 1; }
