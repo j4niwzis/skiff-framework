@@ -128,6 +128,8 @@ jobs:
             -DCMAKE_CXX_STDLIB_MODULES_JSON=/tmp/libstdc++.modules.json \
             -DCME_STORE_ENABLED=ON -DCME_SOURCES_ENABLED=ON
           cmake --build build/native --target site -- -k 0
+          cmake --build build/native --target skiff_framework_state_test -- -k 0
+          build/native/skiff_framework_state_test
           std=$(grep -oE 'cmake_cxx_std[^/ ]*\.dir' build/native/build.ninja | sort -u)
           echo "$std"
           test "$(echo "$std" | wc -l)" = 1

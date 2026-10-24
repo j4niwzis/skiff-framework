@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 4.3.4 FATAL_ERROR)
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/import-std.cmake)
-# C++23 for every library this build makes, not only for its own targets:
-# splice takes the build's standard, and below 23 it is not itself.
-set(CMAKE_CXX_STANDARD 23)
+# C++26 for every library this build makes, not only for its own targets:
+# splice takes the build's standard, and knot (the state a page carries)
+# is C++26's.
+set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # skiff-framework: skiff, skiff-widgets and what nearly every program
@@ -58,6 +59,16 @@ if(SKIFF_FRAMEWORK_APP)
   if(NOT TARGET skiff::ui)
     find_package(skiff-widgets 0.1.0 REQUIRED)
   endif()
+  # knot: the model written into the page as JSON, and read back.
+  if(COMMAND cme_declare_port AND NOT TARGET knot)
+    cme_declare_port(NAME knot PROVIDES knot
+      GITHUB_REPOSITORY j4niwzis/knot
+      GIT_TAG 56858a4b579584a85b488db99ef10687a97702d5
+      LICENSE AGPL-3.0-only)
+  endif()
+  if(NOT TARGET knot)
+    find_package(knot REQUIRED)
+  endif()
 
   # Under Emscripten every unit -- the std module CMake makes among them -- is
   # compiled with exceptions, or the std module is not one they can load: said
@@ -70,9 +81,9 @@ if(SKIFF_FRAMEWORK_APP)
   add_library(skiff::framework ALIAS skiff_framework)
   target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc)
   target_include_directories(skiff_framework PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-  set_target_properties(skiff_framework PROPERTIES EXPORT_NAME framework CXX_STANDARD 23)
-  target_compile_features(skiff_framework PUBLIC cxx_std_23)
-  target_link_libraries(skiff_framework PUBLIC skiff::ui)
+  set_target_properties(skiff_framework PROPERTIES EXPORT_NAME framework CXX_STANDARD 26)
+  target_compile_features(skiff_framework PUBLIC cxx_std_26)
+  target_link_libraries(skiff_framework PUBLIC skiff::ui knot)
 endif()
 
 # The native window: skiff's scene in a window of the system's (SDL3), drawn
@@ -178,7 +189,7 @@ endif()
 function(skiff_app target)
   cmake_parse_arguments(APP "" "SHELL" "" ${ARGN})
   target_link_libraries(${target} PRIVATE skiff::framework)
-  set_target_properties(${target} PROPERTIES CXX_STANDARD 23 CXX_SCAN_FOR_MODULES ON)
+  set_target_properties(${target} PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
   if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
     set_target_properties(${target} PROPERTIES OUTPUT_NAME index SUFFIX .html)
     target_link_options(${target} PRIVATE -fexceptions
@@ -191,6 +202,15 @@ function(skiff_app target)
     endif()
   endif()
 endfunction()
+
+# The framework's own checks, natively: the state a page carries.
+if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  enable_testing()
+  add_executable(skiff_framework_state_test test/state.cc)
+  set_target_properties(skiff_framework_state_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
+  target_link_libraries(skiff_framework_state_test PRIVATE skiff::framework)
+  add_test(NAME state COMMAND skiff_framework_state_test)
+endif()
 
 option(SKIFF_FRAMEWORK_SITE "Build skiff's site, a program of skiff.app" ${PROJECT_IS_TOP_LEVEL})
 if(NOT SKIFF_FRAMEWORK_APP)

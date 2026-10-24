@@ -23,6 +23,15 @@
 //   skiff::scene::Colour paper()          what the canvas is cleared to
 //   void open(std::string_view href)      a link followed on the canvas
 //   std::string_view head()               the <head> written out with the page
+//
+// The model the page was written with travels with it: written into the
+// page as JSON (knot) beside the markup -- <script type="application/json"
+// id="skiff-state"> -- and read back in the browser into the same model
+// before the page is taken over, so the elements taken over and the model
+// under them agree; start() then is not run. Only where every part of the
+// model is something knot reads and writes (a described type -- json_schema
+// -- a string, a number, a bool, an optional, a vector or a map of them):
+// a model with any other part travels not, and starts as start() makes it.
 module;
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -31,6 +40,7 @@ export module skiff.app;
 
 export import skiff.ui;
 import std;
+import knot;
 
 #ifdef __EMSCRIPTEN__
 // ---- the page's side, in JavaScript ---------------------------------------
@@ -91,8 +101,25 @@ EM_JS(double, skiffAppCanvasOffset, (), {
   return c.getBoundingClientRect().top - host.getBoundingClientRect().top;
 });
 EM_JS(void, skiffAppOpen, (const char *href, int length), { window.location.href = UTF8ToString(href, length); });
+// The state the page was written with, where it carries one: its text, made
+// for the program to free; else none.
+EM_JS(char *, skiffAppStateText, (), {
+  const kept = document.getElementById('skiff-state');
+  return kept ? stringToNewUTF8(kept.textContent) : 0;
+});
 // clang-format on
 #endif
+
+// skiff.model's own types, as knot reads and writes them: found by
+// argument-dependent lookup, so that skiff.model needs nothing of knot. A
+// tracked value is its value and its revision; the parts of a model, each in
+// its place.
+export namespace skiff::model {
+template <class T> consteval auto json_schema(knot::type<Tracked<T>>) {
+  return knot::schema<Tracked<T>>().template member<"fValue">(knot::key("value")).template member<"fRevision">(knot::key("revision"));
+}
+template <class... P> consteval auto json_schema(knot::type<Assembled<P...>>) { return knot::schema<Assembled<P...>>(); }
+} // namespace skiff::model
 
 export namespace skiff::app {
 
@@ -106,6 +133,24 @@ inline constexpr bool kInBrowser = false;
 
 // A program that adds nothing.
 struct NoHooks {};
+
+// What knot reads and writes, as a model's part may be: a type described
+// to it (json_schema) or one that is its one member, a string, a bool, a
+// number, and an optional, a vector or a map of them; a tracked one of
+// those; and the parts of a model, all of them so.
+template <class T> struct Transferable : std::bool_constant<knot::described<T> || knot::transparent<T>> {};
+template <> struct Transferable<std::string> : std::true_type {};
+template <> struct Transferable<bool> : std::true_type {};
+template <class T>
+  requires std::integral<T>
+struct Transferable<T> : std::true_type {};
+template <class T> struct Transferable<std::optional<T>> : Transferable<T> {};
+template <class T> struct Transferable<std::vector<T>> : Transferable<T> {};
+template <class T> struct Transferable<std::map<std::string, T>> : Transferable<T> {};
+template <class T> struct Transferable<skiff::model::Tracked<T>> : Transferable<T> {};
+template <class... P> struct Transferable<skiff::model::Assembled<P...>> : std::bool_constant<(Transferable<P>::value && ...)> {};
+template <class Root>
+concept TransferableRoot = Transferable<Root>::value;
 
 namespace detail {
 // The scene's root: the tree, as the program's -- found by its type where
@@ -137,6 +182,14 @@ inline bool write(const std::string &path, std::string_view text) {
   std::ofstream out(path, std::ios::binary);
   out << text;
   return static_cast<bool>(out);
+}
+// The model's parts as JSON in a <script> of the page: "</" written "<\\/" --
+// the same string to JSON -- so that nothing in it ends the script.
+template <class Root> std::string stateScript(const Root &root) {
+  using namespace std::string_view_literals;
+  return "<script type=\"application/json\" id=\"skiff-state\">" +
+         (knot::to_json_string(root) | std::views::split("</"sv) | std::views::join_with("<\\/"sv) | std::ranges::to<std::string>()) +
+         "</script>";
 }
 inline constexpr std::string_view kHead = R"(<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -203,11 +256,20 @@ template <auto View, class Hooks = NoHooks> struct App {
     if (page()) page()->event(handle, std::string_view(what), std::string_view(value));
   }
 
-  static void begin() {
+  static void begin(bool arrived = false) {
     if constexpr (requires { hooks().dress(); })
       hooks().dress();
     if constexpr (requires { hooks().start(model()); })
-      hooks().start(model());
+      if (!arrived)
+        hooks().start(model());
+  }
+  // The state the page was written with, written into it: where the model
+  // travels (TransferableRoot); else nothing.
+  static std::string stateScript() {
+    if constexpr (TransferableRoot<typename Model::RootType>)
+      return detail::stateScript(model().root());
+    else
+      return {};
   }
 
   // Written out natively: `program [whole.html] [index.html]` -- the page
@@ -224,8 +286,9 @@ template <auto View, class Hooks = NoHooks> struct App {
     std::string head(detail::kHead);
     if constexpr (requires { hooks().head(); })
       head += std::string(hooks().head());
-    const std::string whole =
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n" + head + "</head>\n<body>\n<div id=\"skiff\">" + markup + "</div>\n</body>\n</html>\n";
+    const std::string state = stateScript();
+    const std::string whole = "<!doctype html>\n<html lang=\"en\">\n<head>\n" + head + "</head>\n<body>\n<div id=\"skiff\">" + markup +
+                              "</div>\n" + state + "\n</body>\n</html>\n";
     if (argc < 2) {
       std::print("{}", whole);
       return 0;
@@ -243,6 +306,11 @@ template <auto View, class Hooks = NoHooks> struct App {
         return 1;
       }
       made.replace(at, kMark.size(), markup);
+      // The state beside it, where the page says where (@@SKIFF-STATE@@,
+      // outside the page's root: what is taken over is the root's own).
+      constexpr std::string_view kState = "@@SKIFF-STATE@@";
+      if (const std::size_t there = made.find(kState); there != std::string::npos)
+        made.replace(there, kState.size(), state);
       if (!detail::write(argv[2], made)) {
         std::println(std::cerr, "skiff::app: cannot write {}", argv[2]);
         return 1;
@@ -450,8 +518,24 @@ template <auto View, class Hooks = NoHooks> struct App {
   // In the browser: the copy written when the program was built -- the
   // stylesheets, then the page -- taken over, not made again: the same
   // elements, now the live page's. Where there is none, made.
+  // The state the page was written with, read into the model: whether it
+  // came.
+  static bool arrive() {
+    if constexpr (TransferableRoot<typename Model::RootType>) {
+      char *text = skiffAppStateText();
+      if (!text) return false;
+      const std::string kept(text);
+      std::free(text);
+      auto read = knot::try_read<typename Model::RootType>(std::string_view(kept));
+      if (!read) return false;
+      model() = Model(std::move(*read));
+      return true;
+    } else {
+      return false;
+    }
+  }
   static int live() {
-    begin();
+    begin(arrive());
     const skiff::web::dom::Handle root = skiff::web::dom::root();
     if (skiff::web::dom::children(root) > sheets()) {
       page().emplace(skiff::ui::mount(skiff::ui::onPage, View()), model());
