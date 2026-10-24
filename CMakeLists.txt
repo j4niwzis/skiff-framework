@@ -230,7 +230,7 @@ if(SKIFF_FRAMEWORK_APP)
 
   add_library(skiff_framework STATIC)
   add_library(skiff::framework ALIAS skiff_framework)
-  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${skiff_framework_carry} ${skiff_framework_canvas} ${skiff_framework_net} ${skiff_framework_serve})
+  target_sources(skiff_framework PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cc ${CMAKE_CURRENT_SOURCE_DIR}/src/route.cc ${skiff_framework_carry} ${skiff_framework_canvas} ${skiff_framework_net} ${skiff_framework_serve})
   target_include_directories(skiff_framework PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
   set_target_properties(skiff_framework PROPERTIES EXPORT_NAME framework CXX_STANDARD 26)
   target_compile_features(skiff_framework PUBLIC cxx_std_26)
@@ -328,7 +328,7 @@ function(skiff_app target)
     set_target_properties(${target} PROPERTIES OUTPUT_NAME index SUFFIX .html)
     # What the page's JavaScript calls: its events, and the canvas's where
     # there is one.
-    set(exported _main,_malloc,_free,_skiff_web_event,_skiff_loopback_open,_skiff_loopback_begin,_skiff_loopback_next,_skiff_loopback_post,_skiff_loopback_close,_skiff_app_wake)
+    set(exported _main,_malloc,_free,_skiff_web_event,_skiff_loopback_open,_skiff_loopback_begin,_skiff_loopback_next,_skiff_loopback_post,_skiff_loopback_close,_skiff_app_wake,_skiff_app_route,_skiff_app_route_known)
     if(SKIFF_FRAMEWORK_CANVAS)
       string(APPEND exported ,_skiff_canvas_pointer,_skiff_canvas_key,_skiff_canvas_text)
     endif()
@@ -350,6 +350,15 @@ if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND SKIFF_FRAMEWORK_SSR AND NOT 
   set_target_properties(skiff_framework_state_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
   target_link_libraries(skiff_framework_state_test PRIVATE skiff::framework)
   add_test(NAME state COMMAND skiff_framework_state_test)
+endif()
+
+# Routes read from paths and kept with the model (test/route.cc).
+if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  enable_testing()
+  add_executable(skiff_framework_route_test test/route.cc)
+  set_target_properties(skiff_framework_route_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
+  target_link_libraries(skiff_framework_route_test PRIVATE skiff::framework)
+  add_test(NAME route COMMAND skiff_framework_route_test)
 endif()
 
 # The network's runner, with a transport of the test's own (test/net.cc).

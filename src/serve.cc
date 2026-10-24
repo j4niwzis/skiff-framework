@@ -31,6 +31,7 @@ import std;
 import skiff.ui;
 import skiff.app.net;
 import skiff.app.net.native;
+import skiff.app.route;
 
 namespace skiff::app::serve {
 
@@ -42,8 +43,11 @@ using tcp = asio::ip::tcp;
 inline constexpr std::chrono::seconds kHeartbeat{25};
 inline constexpr std::string_view kEventPath = "/skiff/event";
 
-// What a request asks, read once where it comes in.
-struct Page {};
+// What a request asks, read once where it comes in: a page at a path (the
+// program's route), a form posted, the program built for the browser.
+struct Page {
+  std::string path;
+};
 struct Event {
   std::string session;
 };
@@ -60,10 +64,10 @@ inline constexpr std::string_view kClientPath = "/skiff/client/";
   const std::size_t q = std::min(target.find('?'), target.size());
   const std::string_view path = target.substr(0, q);
   const std::string_view query = target.substr(std::min(q + 1, target.size()));
-  if (verb == http::verb::get && path == "/") return Page{};
   if (verb == http::verb::post && path == kEventPath && query.starts_with("s=")) return Event{std::string(query.substr(2))};
   if (verb == http::verb::get && path == std::string(kClientPath) + "index.js") return File{Asset::kScript};
   if (verb == http::verb::get && path == std::string(kClientPath) + "index.wasm") return File{Asset::kWasm};
+  if (verb == http::verb::get && !path.starts_with("/skiff/")) return Page{std::string(path)};
   return Missing{};
 }
 
@@ -97,7 +101,7 @@ template <class A> struct Server {
   // it is served with the page.
   std::optional<std::filesystem::path> client;
 
-  asio::awaitable<void> stream(beast::tcp_stream &socket, unsigned version) {
+  asio::awaitable<void> stream(beast::tcp_stream &socket, unsigned version, std::string path) {
     const std::string name = sessionName();
     auto &session = *sessions.emplace(name, std::make_unique<Session<A>>(socket.get_executor())).first->second;
     if constexpr (requires { A::hooks().start(session.model); })
@@ -106,8 +110,13 @@ template <class A> struct Server {
     options.action = std::string(kEventPath) + "?s=" + name;
     options.css = css;
     options.script = script;
+    // Its links, the program's routes, read against the server's root.
+    options.head = "<base href=\"/\">\n";
     if constexpr (requires { A::hooks().head(); })
-      options.head = std::string(A::hooks().head());
+      options.head += std::string(A::hooks().head());
+    // The route the path asked for: where the session begins.
+    skiff::app::route::Router<typename A::Model> router;
+    (void)router.arrive(session.model, path);
     if (client && script) options.head += "<script async src=\"" + std::string(kClientPath) + "index.js\"></script>\n";
     session.page.emplace(skiff::ui::mount(skiff::ui::onPage, A::view()), session.model, std::move(options));
 
@@ -172,9 +181,9 @@ template <class A> struct Server {
     unsigned version;
     std::string_view body;
     bool &streamed;
-    asio::awaitable<void> operator()(const Page &) const {
+    asio::awaitable<void> operator()(const Page &page) const {
       streamed = true;
-      return server.stream(socket, version);
+      return server.stream(socket, version, page.path);
     }
     asio::awaitable<void> operator()(const Event &to) const { return server.event(socket, version, to, body); }
     asio::awaitable<void> operator()(const File &file) const { return server.file(socket, version, file); }

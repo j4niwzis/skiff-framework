@@ -4,7 +4,7 @@
 // (skiff.app's loopback, through skiff-served.js in the page). With it, the
 // page served live, with script or without, is seen with no server at all.
 //
-//   GET  served/?script=0|1      the page, streamed: a session made for it
+//   GET  served/PATH?script=0|1  the page at that path, streamed: a session made for it
 //   POST served/skiff/event?s=N  a form posted from it: 204
 'use strict';
 
@@ -36,7 +36,8 @@ self.addEventListener('fetch', (event) => {
     })());
     return;
   }
-  if (event.request.method === 'GET' && (rest === '' || rest === 'index.html')) {
+  // Any other page under it: the page at that path (the program's route).
+  if (event.request.method === 'GET' && !rest.startsWith('skiff/')) {
     event.respondWith((async () => {
       const page = await host();
       if (!page) return new Response('no page to serve it', {status: 503});
@@ -50,7 +51,8 @@ self.addEventListener('fetch', (event) => {
         },
         cancel() { channel.port1.postMessage('close'); },
       });
-      page.postMessage({open: {script: url.searchParams.get('script') !== '0', action: base + 'skiff/event'}}, [channel.port2]);
+      const path = rest === 'index.html' ? '' : rest;
+      page.postMessage({open: {script: url.searchParams.get('script') !== '0', action: base + 'skiff/event', base, path}}, [channel.port2]);
       return new Response(stream, {headers: {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'}});
     })());
   }

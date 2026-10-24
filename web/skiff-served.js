@@ -25,7 +25,8 @@
     const said = event.data;
     const port = event.ports[0];
     if (said.open) {
-      const id = Module.ccall('skiff_loopback_open', 'number', ['number', 'string'], [said.open.script ? 1 : 0, said.open.action]);
+      const id = Module.ccall('skiff_loopback_open', 'number', ['number', 'string', 'string', 'string'],
+                              [said.open.script ? 1 : 0, said.open.action, said.open.base, said.open.path]);
       sessions.set(id, port);
       port.onmessage = (message) => {
         if (message.data !== 'close') return;

@@ -134,6 +134,14 @@ The framework runs what is asked:
 - **Retries:** the network failing, 5xx and 429 are tried again, waiting a little longer each time (its `Retry-After` honoured), as many times as `retries()` says (4 by default). Anything else fails at once.
 - **Asking again** (`ask` once more) asks again; what was on its way for the earlier round is let go.
 
+## Routes
+
+`skiff.app.route` keeps track of where the program is. The URL is read once into the program's own types: `Routes`, a `std::variant` of route types, each with a static `parse(path)` (`route::segments` helps) and a `path()`. The current route is a model part, `route::At<Routes>`. A view bound to it shows the page it says; a handler goes elsewhere with `model::over<route::At<Routes>>(route::go<Routes>(User{42}))`.
+
+Paths are the app's own, relative to where it is served (no leading slash; `""` is the first page), so a link's `href` is a route's `path()` as it is.
+- **In a browser,** the address bar follows the part (the History API), and the part follows the address bar: back and forward, and a click on a link to one of the program's routes, which the program takes over from the browser.
+- **Served,** the path a request asks for is the route its session starts on. A link is a request of its own, so routing works with no script.
+
 ## The window
 
 `skiff.platform.window` (`src/platform/`): skiff's scene in a window of the

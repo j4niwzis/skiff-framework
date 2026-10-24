@@ -58,6 +58,7 @@ import skiff.app.carry;
 import skiff.app.canvas;
 import skiff.app.serve;
 import skiff.app.net;
+import skiff.app.route;
 
 #ifdef __EMSCRIPTEN__
 // ---- the page's side, in JavaScript ---------------------------------------
@@ -70,6 +71,40 @@ EM_JS(void, skiffAppOpen, (const char *href, int length), { window.location.href
 // Whether the page was served live (skiff.app.serve): its parts the
 // server's, but for those that are the browser's own (clients).
 EM_JS(int, skiffAppServed, (), { return document.querySelector('skiff-live') ? 1 : 0; });
+// Where the page is, as the program's routes read it: the path past where it
+// is served from (the document's base), for the program to free.
+EM_JS(char *, skiffAppPath, (), {
+  const base = new URL(document.baseURI).pathname;
+  const path = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : location.pathname;
+  return stringToNewUTF8(path);
+});
+// The address bar following the program: a route gone to, said.
+EM_JS(void, skiffAppPush, (const char *path, int replace), {
+  const url = new URL(UTF8ToString(path), document.baseURI);
+  if (url.href === location.href) return;
+  if (replace) history.replaceState({skiff: 1}, '', url); else history.pushState({skiff: 1}, '', url);
+});
+// And the program following the address bar: back and forward, and a link
+// to one of its routes clicked -- taken by the program, not the browser.
+EM_JS(void, skiffAppRouting, (), {
+  const pathOf = (pathname) => {
+    const base = new URL(document.baseURI).pathname;
+    return pathname.startsWith(base) ? pathname.slice(base.length) : null;
+  };
+  window.addEventListener('popstate', () => {
+    const path = pathOf(location.pathname);
+    if (path !== null) Module.ccall('skiff_app_route', null, ['string', 'number'], [path, 0]);
+  });
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.composedPath().find((one) => one instanceof HTMLAnchorElement);
+    if (!link || link.target || link.origin !== location.origin) return;
+    const path = pathOf(link.pathname);
+    if (path === null || !Module.ccall('skiff_app_route_known', 'number', ['string'], [path])) return;
+    event.preventDefault();
+    Module.ccall('skiff_app_route', null, ['string', 'number'], [path, 1]);
+  });
+});
 // The program woken again after a while (a request to try again), once:
 // the soonest asked.
 EM_JS(void, skiffAppWakeIn, (int ms), {
@@ -140,9 +175,16 @@ template <auto View, class Hooks = NoHooks> struct App {
     static Hooks kept;
     return kept;
   }
-  // What nothing in the tree takes: a link followed, the program's to do.
+  // What nothing in the tree takes: a link followed, the program's to do --
+  // one of its routes gone to, else the program's open, else the browser's.
   struct Sink {
     void take(const skiff::ui::OpenLink &link) const {
+#ifdef __EMSCRIPTEN__
+      if (skiff::app::route::Router<Model>::known(link.href)) {
+        App::route(link.href.c_str(), 1);
+        return;
+      }
+#endif
       if constexpr (requires { hooks().open(std::string_view(link.href)); })
         hooks().open(std::string_view(link.href));
 #ifdef __EMSCRIPTEN__
@@ -302,7 +344,21 @@ template <auto View, class Hooks = NoHooks> struct App {
       if (const auto theirs = one->runner.next(); theirs && (!next || *theirs < *next)) next = theirs;
     return next;
   }
+  // Where the program is (skiff.app.route), kept one with the address bar.
+  static skiff::app::route::Router<Model> &router() {
+    static skiff::app::route::Router<Model> kept;
+    return kept;
+  }
+  // A path come -- back or forward (pushed: no), a link (yes): the model's
+  // route set to it, and the address bar saying it where it was a link.
+  static void route(const char *path, int pushed) {
+    if (!router().arrive(model(), path)) return;
+    if (pushed) skiffAppPush(path, 0);
+    settle();
+  }
+  [[nodiscard]] static int routeKnown(const char *path) { return skiff::app::route::Router<Model>::known(path) ? 1 : 0; }
   static void settle() {
+    if (const auto moved = router().moved(model())) skiffAppPush(moved->c_str(), 0);
     if (served()) {
       takeOver();
       skiff::web::forEachClient(*served(), [](auto &one) {
@@ -402,7 +458,7 @@ template <auto View, class Hooks = NoHooks> struct App {
     made[text.size()] = '\0';
     return made;
   }
-  static int loopbackOpen(int script, const char *action) {
+  static int loopbackOpen(int script, const char *action, const char *base, const char *path) {
     static int last = 0;
     const int id = ++last;
     Loopback &one = *loopbacks().emplace(id, std::make_unique<Loopback>()).first->second;
@@ -413,9 +469,13 @@ template <auto View, class Hooks = NoHooks> struct App {
     options.css = skiff::ui::themeCss(skiff::widgets::theme());
     if constexpr (requires { hooks().stylesheet(); })
       options.css += std::string(hooks().stylesheet());
+    // Its links, the program's routes, read against where it is served.
+    options.head = "<base href=\"" + std::string(base) + "\">\n";
     if constexpr (requires { hooks().head(); })
-      options.head = std::string(hooks().head());
+      options.head += std::string(hooks().head());
     options.script = script != 0;
+    skiff::app::route::Router<Model> router;
+    (void)router.arrive(one.model, path);
     one.page.emplace(skiff::ui::mount(skiff::ui::onPage, View()), one.model, std::move(options));
     return id;
   }
@@ -444,6 +504,16 @@ template <auto View, class Hooks = NoHooks> struct App {
   static int live() {
     if (skiffAppServed()) return hybrid();
     begin(arrive());
+    // Where the page was opened at: the route it reads, and the address bar
+    // and the program kept one from now on.
+    {
+      char *path = skiffAppPath();
+      const bool read = router().arrive(model(), path);
+      std::free(path);
+      if (!read)
+        if (const auto first = router().moved(model())) skiffAppPush(first->c_str(), 1);
+    }
+    skiffAppRouting();
     const skiff::web::dom::Handle root = skiff::web::dom::root();
     if (skiff::web::dom::children(root) > sheets()) {
       page().emplace(skiff::ui::mount(skiff::ui::onPage, View()), model());
