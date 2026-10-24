@@ -46,10 +46,20 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       await running;
       const body = await event.request.text();
-      Module.ccall('skiff_loopback_post', null, ['number', 'string'], [Number(url.searchParams.get('s')), body]);
+      const known = Module.ccall('skiff_loopback_post', 'number', ['number', 'string'], [Number(url.searchParams.get('s')), body]);
       pump();
-      return new Response(null, {status: 204});
+      // A session this worker does not have (it was stopped, and started
+      // again): gone -- the page, with script, loads itself again.
+      return new Response(null, {status: known ? 204 : 410});
     })());
+    return;
+  }
+  // What keeps this worker going while a page it serves is open: asked again
+  // every ten seconds by a frame of the page's (a browser stops a worker
+  // that hears nothing, and its sessions with it), with no script.
+  if (event.request.method === 'GET' && rest === 'skiff/alive') {
+    event.respondWith(new Response('<!doctype html><meta http-equiv="refresh" content="10">',
+                                   {headers: {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'}}));
     return;
   }
   // Any other page under it: the page at that path (the program's route).

@@ -34,7 +34,7 @@
   extern "C" __attribute__((used)) int skiff_app_route_known(const char *path) { return app::routeKnown(path); }                                                                                                                      \
   extern "C" __attribute__((used)) char *skiff_loopback_begin(int id) { return app::loopbackBegin(id); }                 \
   extern "C" __attribute__((used)) char *skiff_loopback_next(int id) { return app::loopbackNext(id); }                   \
-  extern "C" __attribute__((used)) void skiff_loopback_post(int id, const char *body) { app::loopbackPost(id, body); }  \
+  extern "C" __attribute__((used)) int skiff_loopback_post(int id, const char *body) { return app::loopbackPost(id, body); } \
   extern "C" __attribute__((used)) void skiff_loopback_close(int id) { app::loopbackClose(id); }                       \
   extern "C" __attribute__((used)) void skiff_app_wake() { app::settle(); }
 #else

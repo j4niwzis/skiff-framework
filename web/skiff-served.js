@@ -10,9 +10,12 @@
   const version = new URL(document.currentScript.src).searchParams.get('v');
   // Where the page may not run a service worker (a policy against it, a
   // private window): said, rather than nothing happening.
-  const ready = navigator.serviceWorker.register('skiff-sw.js' + (version ? '?v=' + version : ''))
+  // Registered only once served is asked for (or remembered): a page that
+  // stays a page starts no worker.
+  let started = null;
+  const ready = () => started || (started = navigator.serviceWorker.register('skiff-sw.js' + (version ? '?v=' + version : ''))
     .then(() => navigator.serviceWorker.ready)
-    .then(() => null, (failed) => String((failed && failed.message) || failed));
+    .then(() => null, (failed) => String((failed && failed.message) || failed)));
   const go = (mode) => { location.href = 'served/?script=' + (mode === 'js' ? '1' : '0'); };
   window.skiff = window.skiff || {};
   window.skiff.served = {
@@ -21,7 +24,7 @@
         localStorage.removeItem('skiff:served');
         return;
       }
-      const refused = await ready;
+      const refused = await ready();
       if (refused) {
         alert('The page cannot be served here: its service worker could not start (' + refused + ').');
         return;
@@ -33,5 +36,5 @@
   // Remembered as served, and the worker not running this page yet (a first
   // visit, or one after it was let go): gone there once it is.
   const remembered = localStorage.getItem('skiff:served');
-  if (remembered) ready.then((refused) => { if (!refused) go(remembered); });
+  if (remembered) ready().then((refused) => { if (!refused) go(remembered); });
 })();

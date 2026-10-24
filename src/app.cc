@@ -538,6 +538,8 @@ template <auto View, class Hooks = NoHooks> struct App {
     // a way back to the page, say.
     if constexpr (requires { hooks().servedLead(options.script); })
       options.lead = std::string(hooks().servedLead(options.script));
+    // The worker serving it kept going while the page is open (skiff-sw.js).
+    options.lead += "<iframe src=\"skiff/alive\" hidden title=\"\"></iframe>\n";
     skiff::app::route::Router<Model> router;
     (void)router.arrive(one.model, path);
     one.page.emplace(skiff::ui::mount(skiff::ui::onPage, View()), one.model, std::move(options));
@@ -558,11 +560,13 @@ template <auto View, class Hooks = NoHooks> struct App {
     one->runner.step(one->model);
     return handedOut(one->page->update());
   }
-  static void loopbackPost(int id, const char *body) {
-    if (Loopback *one = loopback(id)) {
-      one->page->post(std::string_view(body));
-      one->runner.step(one->model);
-    }
+  // A form posted to a session: whether the session is there.
+  static int loopbackPost(int id, const char *body) {
+    Loopback *one = loopback(id);
+    if (!one) return 0;
+    one->page->post(std::string_view(body));
+    one->runner.step(one->model);
+    return 1;
   }
   static void loopbackClose(int id) { loopbacks().erase(id); }
 
