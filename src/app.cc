@@ -309,6 +309,64 @@ template <auto View, class Hooks = NoHooks> struct App {
     emscripten_set_main_loop([] { servedTick(); }, 0, 0);
     return 0;
   }
+  // ---- the page as its own server: loopback ----
+  // What a server does with the page (skiff::web::Live), done here in the
+  // browser: each session a model of its own and the page kept for it, its
+  // stream handed out a piece at a time, a form posted taken -- for the
+  // framework's service worker (web/skiff-sw.js) to answer requests with as
+  // a server would, so that the page served, with script or without, is
+  // seen with no server at all (the site's switch).
+  struct Loopback {
+    Model model;
+    std::optional<skiff::web::Live<PageTree, Model>> page;
+  };
+  static std::map<int, std::unique_ptr<Loopback>> &loopbacks() {
+    static std::map<int, std::unique_ptr<Loopback>> kept;
+    return kept;
+  }
+  // A piece of the stream, for the page's JavaScript to read and free; none
+  // where there is nothing.
+  static char *handedOut(const std::string &text) {
+    if (text.empty()) return nullptr;
+    char *made = static_cast<char *>(std::malloc(text.size() + 1));
+    std::memcpy(made, text.data(), text.size());
+    made[text.size()] = '\0';
+    return made;
+  }
+  static int loopbackOpen(int script, const char *action) {
+    static int last = 0;
+    const int id = ++last;
+    Loopback &one = *loopbacks().emplace(id, std::make_unique<Loopback>()).first->second;
+    if constexpr (requires { hooks().start(one.model); })
+      hooks().start(one.model);
+    typename skiff::web::Live<PageTree, Model>::Options options;
+    options.action = std::string(action) + "?s=" + std::to_string(id);
+    options.css = skiff::ui::themeCss(skiff::widgets::theme());
+    if constexpr (requires { hooks().stylesheet(); })
+      options.css += std::string(hooks().stylesheet());
+    if constexpr (requires { hooks().head(); })
+      options.head = std::string(hooks().head());
+    options.script = script != 0;
+    one.page.emplace(skiff::ui::mount(skiff::ui::onPage, View()), one.model, std::move(options));
+    return id;
+  }
+  static Loopback *loopback(int id) {
+    const auto found = loopbacks().find(id);
+    return found == loopbacks().end() ? nullptr : found->second.get();
+  }
+  static char *loopbackBegin(int id) {
+    Loopback *one = loopback(id);
+    return one ? handedOut(one->page->begin()) : nullptr;
+  }
+  static char *loopbackNext(int id) {
+    Loopback *one = loopback(id);
+    return one ? handedOut(one->page->update()) : nullptr;
+  }
+  static void loopbackPost(int id, const char *body) {
+    if (Loopback *one = loopback(id)) one->page->post(std::string_view(body));
+  }
+  static void loopbackClose(int id) { loopbacks().erase(id); }
+
   static int live() {
     if (skiffAppServed()) return hybrid();
     begin(arrive());

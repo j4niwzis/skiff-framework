@@ -25,7 +25,14 @@
   extern "C" __attribute__((used)) int skiff_canvas_key(int code, int shift, int control) {                              \
     return app::key(code, shift, control);                                                                               \
   }                                                                                                                      \
-  extern "C" __attribute__((used)) int skiff_canvas_text(const char *typed) { return app::text(typed); }
+  extern "C" __attribute__((used)) int skiff_canvas_text(const char *typed) { return app::text(typed); }               \
+  extern "C" __attribute__((used)) int skiff_loopback_open(int script, const char *action) {                             \
+    return app::loopbackOpen(script, action);                                                                            \
+  }                                                                                                                      \
+  extern "C" __attribute__((used)) char *skiff_loopback_begin(int id) { return app::loopbackBegin(id); }                 \
+  extern "C" __attribute__((used)) char *skiff_loopback_next(int id) { return app::loopbackNext(id); }                   \
+  extern "C" __attribute__((used)) void skiff_loopback_post(int id, const char *body) { app::loopbackPost(id, body); }  \
+  extern "C" __attribute__((used)) void skiff_loopback_close(int id) { app::loopbackClose(id); }
 #else
 #define SKIFF_APP_ENTRIES(app)
 #endif

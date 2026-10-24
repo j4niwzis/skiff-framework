@@ -167,6 +167,8 @@ jobs:
         run: |
           mkdir -p public
           cp build/wasm/site/index.html build/wasm/site/index.js build/wasm/site/index.wasm public/
+          # The page as its own server: its service worker and the page's side.
+          cp web/skiff-sw.js web/skiff-served.js public/
           build/native/site/site public/static.html public/index.html
           # The script and the WebAssembly named by this revision: a browser
           # that kept the last index.js would load it with the new index.wasm,

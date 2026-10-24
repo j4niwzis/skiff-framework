@@ -109,7 +109,9 @@ Where the browser runs script, an optional inline script of a few lines improves
 
 Without script, the part stays as the server wrote it.
 
-The machinery is `skiff::web::Live` and `skiff::web::Client` in skiff. A canvas of the page's own needs script, so it stays blank here.
+The machinery is `skiff::web::Live` and `skiff::web::Client` in skiff.
+
+**No server at all.** In the browser, a program of skiff.app can be its own server (its *loopback*): `web/skiff-sw.js`, a service worker, answers requests under `served/` as `skiff.app.serve` would. It streams the page and takes posted forms, while the page's own WebAssembly does the server's part through `web/skiff-served.js`. The site's switch (*page · served, no JS · served, JS*) shows the page served both ways, with no server. A canvas of the page's own needs script, so it stays blank here.
 
 ## The window
 

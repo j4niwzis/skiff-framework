@@ -288,12 +288,12 @@ function(skiff_app target)
     set_target_properties(${target} PROPERTIES OUTPUT_NAME index SUFFIX .html)
     # What the page's JavaScript calls: its events, and the canvas's where
     # there is one.
-    set(exported _main,_skiff_web_event)
+    set(exported _main,_malloc,_free,_skiff_web_event,_skiff_loopback_open,_skiff_loopback_begin,_skiff_loopback_next,_skiff_loopback_post,_skiff_loopback_close)
     if(SKIFF_FRAMEWORK_CANVAS)
       string(APPEND exported ,_skiff_canvas_pointer,_skiff_canvas_key,_skiff_canvas_text)
     endif()
     target_link_options(${target} PRIVATE -fexceptions
-      -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=ccall
+      -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=ccall,UTF8ToString
       -sEXPORTED_FUNCTIONS=${exported}
       -sSTACK_SIZE=4194304)
     if(APP_SHELL)
