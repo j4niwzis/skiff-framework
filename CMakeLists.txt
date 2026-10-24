@@ -369,7 +369,7 @@ function(skiff_app_client target)
     set_target_properties(${target} PROPERTIES OUTPUT_NAME client SUFFIX .js)
     target_link_options(${target} PRIVATE -fexceptions
       -sALLOW_MEMORY_GROWTH=1 -sEXPORTED_RUNTIME_METHODS=ccall,UTF8ToString
-      -sEXPORTED_FUNCTIONS=_main,_skiff_web_event,_skiff_app_wake
+      -sEXPORTED_FUNCTIONS=_main,_malloc,_free,_skiff_web_event,_skiff_app_wake
       -sSTACK_SIZE=1048576)
   endif()
 endfunction()
