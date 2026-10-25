@@ -577,6 +577,17 @@ int run(App& app, const options& how, const events::kinds& kinds) {
             }
             router.pointer(
                 skiff::scene::pointer::up{event.button.x * to_scene, event.button.y * to_scene, event.button.button});
+            // A tap on the field typed into, its keyboard down: the keyboard
+            // asked for again. Put away in a way SDL did not tell -- the
+            // field kept the focus, and the text input stayed on -- a tap on
+            // that field changed nothing that started the text input, and no
+            // keyboard came until the chat was left and opened again (a
+            // tester). SDL shows it again where it is not shown, and does
+            // nothing where it is.
+            if (by_touch && typing)
+              if (const auto& field = skiff::scene::hostWork().typingAt;
+                  field && field->contains(event.button.x * to_scene, event.button.y * to_scene))
+                sdl::SDL_StartTextInput(window);
             break;
           case sdl::SDL_EVENT_FINGER_DOWN:
             by_touch = true;
