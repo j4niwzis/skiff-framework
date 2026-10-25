@@ -182,6 +182,9 @@ struct options {
   // cleared first, the scene no longer opaque at its bottom.
   bool transparent = false;
   std::string fonts = window_setup::fonts;
+  // Where the GPU programs compiled are kept between runs (a directory);
+  // compiled again at every run where it is empty.
+  std::string programs;
 };
 
 namespace detail {
@@ -343,7 +346,7 @@ int run(App& app, const options& how, const events::kinds& kinds) {
   }
   int result = 0;
   {
-    detail::canvas_target target(window, how.software);
+    detail::canvas_target target(window, how.software, how.programs);
     // Said once, for the window -- not for each notification's, drawn in
     // software on purpose.
     std::println(std::cerr, "[skiff] drawing {}", target.on_gpu() ? "with OpenGL" : "in software");

@@ -65,9 +65,58 @@ inline std::optional<skia::SkColorType> colour_type_of(sdl::SDL_PixelFormat form
   }
 }
 
+#if defined(SK_GANESH)
+// The GPU programs Skia compiled, kept on the disk between runs: each in a
+// file named by its key, the key itself first in it -- read back only where
+// it is the same key. Compiled again at every run, the first frame of each
+// kind of drawing a page brought waited on the GPU driver for it: a phone
+// stood still a second as a page with fields and switches first came in
+// over a fading dialog. Skia asks for them through its own class
+// (GrContextOptions::PersistentCache), subclassed here as its API wants.
+class program_cache final : public skia::GrContextOptions::PersistentCache {
+ public:
+  explicit program_cache(std::filesystem::path dir) : dir_(std::move(dir)) {}
+  skia::Sp<skia::SkData> load(const skia::SkData& key) override {
+    const auto kept = spl::bytes::file_text(this->path_of(key));
+    const std::string wanted = text_of(key);
+    if (!kept || !kept->starts_with(wanted))
+      return nullptr;
+    // Skia copies what it is given: a pointer to the text's bytes, as its
+    // C-style API takes them.
+    return skia::SkData::MakeWithCopy(kept->data() + wanted.size(), kept->size() - wanted.size());
+  }
+  void store(const skia::SkData& key, const skia::SkData& data) override {
+    std::error_code ignored;
+    std::filesystem::create_directories(dir_, ignored);
+    std::ofstream out(this->path_of(key), std::ios::binary | std::ios::trunc);
+    out << text_of(key) << text_of(data);
+  }
+
+ private:
+  // Its bytes, their count first: no key read as the start of another.
+  static std::string text_of(const skia::SkData& data) {
+    return std::format("{}:", data.size()) + (std::ranges::subrange(data.bytes(), data.bytes() + data.size()) |
+                                             std::views::transform([](std::uint8_t one) { return static_cast<char>(one); }) |
+                                             std::ranges::to<std::string>());
+  }
+  std::filesystem::path path_of(const skia::SkData& key) const {
+    const std::uint64_t hash = std::ranges::fold_left(std::ranges::subrange(key.bytes(), key.bytes() + key.size()), 1469598103934665603ull,
+                                                      [](std::uint64_t so_far, std::uint8_t one) { return (so_far ^ one) * 1099511628211ull; });
+    return dir_ / std::format("{:016x}", hash);
+  }
+  std::filesystem::path dir_;
+};
+#endif
+
 class canvas_target {
  public:
-  canvas_target(sdl::SDL_Window* window, bool software) : window_(window) {
+  // `programs`: where the GPU programs compiled are kept between runs; none
+  // kept where it is empty.
+  canvas_target(sdl::SDL_Window* window, bool software, std::string programs = {}) : window_(window) {
+#if defined(SK_GANESH)
+    if (!programs.empty())
+      programs_ = std::make_unique<program_cache>(std::move(programs));
+#endif
     // GL where the Skia has Ganesh -- its own define says -- and the window
     // was made for it.
 #if defined(SK_GANESH)
@@ -96,7 +145,7 @@ class canvas_target {
                 ? spl::bytes::text_of_terminated(interface->fFunctions.fGetString(0x1F01 /* GL_RENDERER */))
                 : std::string());
         if (interface && kept)
-          context_ = skia::MakeGL(std::move(interface));
+          context_ = this->made(std::move(interface));
       }
       if (!context_ && gl_) {
         sdl::SDL_GL_DestroyContext(gl_);
@@ -144,7 +193,7 @@ class canvas_target {
       auto interface = skia::GrGLMakeAssembledInterface(nullptr, [](void*, const char name[]) -> skia::GrGLFuncPtr {
         return reinterpret_cast<skia::GrGLFuncPtr>(sdl::SDL_GL_GetProcAddress(name));
       });
-      if (interface) context_ = skia::MakeGL(std::move(interface));
+      if (interface) context_ = this->made(std::move(interface));
     }
     if (!context_ && gl_) {
       sdl::SDL_GL_DestroyContext(gl_);
@@ -273,9 +322,22 @@ class canvas_target {
   }
 
  private:
+#if defined(SK_GANESH)
+  // The context, its compiled programs kept where they are asked to be.
+  template <class Interface> skia::Sp<skia::GrDirectContext> made(Interface interface) {
+    skia::GrContextOptions options;
+    if (programs_) {
+      options.fPersistentCache = programs_.get();
+      options.fShaderCacheStrategy = skia::GrContextOptions::ShaderCacheStrategy::kBackendBinary;
+    }
+    return skia::MakeGL(std::move(interface), options);
+  }
+#endif
   sdl::SDL_Window* window_;
 #if defined(SK_GANESH)
   sdl::SDL_GLContext gl_ = nullptr;
+  // Before the context: let go of after the context that uses it.
+  std::unique_ptr<program_cache> programs_;
   skia::Sp<skia::GrDirectContext> context_;
 #endif
   skia::Sp<skia::SkSurface> surface_;
