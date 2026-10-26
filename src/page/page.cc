@@ -30,6 +30,28 @@ import :hooks;
 
 export namespace skiff::platform::page {
 
+namespace detail {
+// A key that edits a field rather than types into it, as the engine takes
+// it: none for the rest (what they type comes as text).
+[[nodiscard]] inline std::optional<skiff::web::blitz::editing_key> editing_key_of(SDL_Keycode key) {
+  using enum skiff::web::blitz::editing_key;
+  switch (key) {
+    case SDLK_BACKSPACE: return backspace;
+    case SDLK_DELETE: return erase;
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER: return enter;
+    case SDLK_LEFT: return left;
+    case SDLK_RIGHT: return right;
+    case SDLK_UP: return up;
+    case SDLK_DOWN: return down;
+    case SDLK_HOME: return home;
+    case SDLK_END: return end;
+    case SDLK_TAB: return tab;
+    default: return std::nullopt;
+  }
+}
+} // namespace detail
+
 // The program, until its window is closed: as window::run, laid out and
 // painted by Blitz.
 template <class App> int run(App &app, const window::options &how, const events::kinds &kinds) {
@@ -55,6 +77,8 @@ template <class App> int run(App &app, const window::options &how, const events:
     // and with the focus, a bubble's tail.
     skiff::web::blitz::addCss(std::string(detail::kPageCss) + skiff::web::pageCss());
     skiff::mirror::Mirror mirror;
+    // Text typed comes as text (SDL_EVENT_TEXT_INPUT), an input method's too.
+    SDL_StartTextInput(shown);
     // The pixels Blitz paints, and the texture they are shown through, at
     // the window's size in pixels.
     std::vector<std::uint8_t> pixels;
@@ -73,9 +97,27 @@ template <class App> int run(App &app, const window::options &how, const events:
           running = false;
         } else if (event.type == kinds.wake) {
           detail::woken(app);
+        } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+          // The engine's own: a field focused, its caret put.
+          skiff::web::blitz::point(skiff::web::blitz::pointer::pressed, event.button.x, event.button.y, event.button.button - 1);
+          repaint = true;
+        } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
+          skiff::web::blitz::point(skiff::web::blitz::pointer::moved, event.motion.x, event.motion.y, 0);
+          repaint = repaint || event.motion.state != 0;
         } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+          skiff::web::blitz::point(skiff::web::blitz::pointer::released, event.button.x, event.button.y, event.button.button - 1);
           if (const auto at = skiff::web::blitz::at(event.button.x, event.button.y); at != skiff::web::dom::kNone && mirror.click(scene, at))
             detail::after_event(app);
+          repaint = true;
+        } else if (event.type == SDL_EVENT_TEXT_INPUT) {
+          // Typed: into the engine's field with the focus.
+          skiff::web::blitz::commitText(event.text.text);
+          repaint = true;
+        } else if (event.type == SDL_EVENT_KEY_DOWN && detail::editing_key_of(event.key.key)) {
+          const SDL_Keymod mod = event.key.mod;
+          skiff::web::blitz::key(*detail::editing_key_of(event.key.key),
+                                 {.shift = (mod & SDL_KMOD_SHIFT) != 0, .control = (mod & SDL_KMOD_CTRL) != 0, .alt = (mod & SDL_KMOD_ALT) != 0,
+                                  .meta = (mod & SDL_KMOD_GUI) != 0});
           repaint = true;
         } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
           float x = 0.0f, y = 0.0f;
@@ -96,6 +138,13 @@ template <class App> int run(App &app, const window::options &how, const events:
       }
       if (!running)
         break;
+      // What the engine's fields were edited to: each given to its node as
+      // typing's edits are, the program told as of typing.
+      for (const auto &[element, value] : skiff::web::blitz::takeEdits())
+        if (mirror.typed(scene, element, value)) {
+          detail::after_event(app);
+          stirred = true;
+        }
       const double began = detail::now_ms();
       if (!stirred && began - mirrored_at < kMirrorAtLeastMs && !repaint)
         continue;
