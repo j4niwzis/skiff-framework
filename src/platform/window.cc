@@ -28,7 +28,7 @@ export import :input;
 export import :canvas;
 export import :toasts;
 
-namespace skiff::platform::window {
+export namespace skiff::platform::window {
 using fonts::load_fonts;
 // The faces a program ships (skiff.platform.fonts): its App's `faces`, where
 // it says any.
