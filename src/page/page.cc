@@ -51,7 +51,9 @@ template <class App> int run(App &app, const window::options &how, const events:
     auto &scene = app.window();
     skiff::scene::hostWork().laidOutElsewhere = true;
     skiff::web::dom::reset();
-    skiff::web::blitz::addCss(detail::kPageCss);
+    // The page's own rules, and skiff.web's: what is done under the pointer
+    // and with the focus, a bubble's tail.
+    skiff::web::blitz::addCss(std::string(detail::kPageCss) + skiff::web::pageCss());
     skiff::mirror::Mirror mirror;
     // The pixels Blitz paints, and the texture they are shown through, at
     // the window's size in pixels.
@@ -82,7 +84,7 @@ template <class App> int run(App &app, const window::options &how, const events:
         } else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_D && (event.key.mod & SDL_KMOD_CTRL) != 0) {
           // Ctrl+D: the page as Blitz holds it, as HTML -- what the mirror wrote.
           const std::filesystem::path to = std::format("page-{}.html", ++dumped);
-          const std::string html = "<html><head><style>" + std::string(detail::kPageCss) + "</style></head>" +
+          const std::string html = "<html><head><style>" + std::string(detail::kPageCss) + skiff::web::pageCss() + "</style></head>" +
                                    skiff::web::dom::dump(skiff::web::dom::root()) + "</html>";
           std::ofstream(to, std::ios::binary) << html;
           std::println(std::cerr, "[page] {} written: {} bytes", std::filesystem::absolute(to).string(), html.size());
