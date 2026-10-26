@@ -332,56 +332,21 @@ if(skiff_framework_has_window)
 endif()
 
 # skiff.platform.page: the program's scene laid out and painted by an HTML
-# engine embedded and called directly -- litehtml: no JavaScript, no
-# browser -- through skiff.mirror, painted with Skia here. What it is for is
-# measuring the engine against skiff's own layout and painting.
+# engine embedded and called directly -- Blitz (Stylo, Taffy, Vello): no
+# JavaScript, no browser, nothing of Skia -- through skiff.mirror, on
+# skiff.web's document as Blitz's (skiff's SKIFF_WEB_DOM=blitz, built with
+# cargo). What it is for is measuring the engine against skiff's own layout
+# and painting.
 option(SKIFF_FRAMEWORK_PAGE "Build skiff.platform.page" OFF)
-# The engine: litehtml (fetched here, painted with Skia or with SDL and
-# FreeType), or Blitz (skiff's skiff.web on SKIFF_WEB_DOM=blitz: Stylo,
-# Taffy, Vello; shown through SDL's renderer).
-set(SKIFF_PAGE_ENGINE "litehtml" CACHE STRING "The page's HTML engine: litehtml or blitz")
 if(SKIFF_FRAMEWORK_PAGE AND TARGET skiff_framework_window)
   add_library(skiff_framework_page STATIC)
   add_library(skiff::page ALIAS skiff_framework_page)
   set_target_properties(skiff_framework_page PROPERTIES EXPORT_NAME page CXX_STANDARD 26)
   target_compile_features(skiff_framework_page PUBLIC cxx_std_26)
-  if(SKIFF_PAGE_ENGINE STREQUAL "blitz")
-    target_sources(skiff_framework_page PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/page/page_blitz.cc
-                                                                          ${CMAKE_CURRENT_SOURCE_DIR}/src/page/hooks.cc)
-    target_link_libraries(skiff_framework_page PUBLIC skiff_framework_window skiff::mirror)
-    message(STATUS "skiff-framework: the page, through Blitz")
-  else()
-    include(FetchContent)
-    set(LITEHTML_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    set(LITEHTML_ENABLE_LINT OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(litehtml GIT_REPOSITORY https://github.com/litehtml/litehtml.git
-                         GIT_TAG 6fd7aaa63833c913cf1a0336e46fb2e027e4c656)
-    FetchContent_MakeAvailable(litehtml)
-    # litehtml is C++17 and imports nothing: where a program builds with
-    # `import std` everywhere (CMAKE_CXX_MODULE_STD), its targets are left out
-    # of it, and out of the scan for modules -- else CMake asks of them a
-    # standard library module of C++17, which there is not.
-    foreach(target IN ITEMS litehtml gumbo)
-      if(TARGET ${target})
-        set_target_properties(${target} PROPERTIES CXX_MODULE_STD OFF CXX_SCAN_FOR_MODULES OFF)
-      endif()
-    endforeach()
-    # Its painter: Skia's where skiff draws with Skia; else SDL's renderer, and
-    # FreeType for the glyphs.
-    if(SKIFF_SKIA)
-      set(skiff_framework_page_paint ${CMAKE_CURRENT_SOURCE_DIR}/src/page/paint_skia.cc)
-    else()
-      set(skiff_framework_page_paint ${CMAKE_CURRENT_SOURCE_DIR}/src/page/paint_sdl.cc)
-      find_package(Freetype REQUIRED)
-    endif()
-    target_sources(skiff_framework_page PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/page/page.cc
-                                                                          ${CMAKE_CURRENT_SOURCE_DIR}/src/page/hooks.cc ${skiff_framework_page_paint})
-    target_link_libraries(skiff_framework_page PUBLIC skiff_framework_window skiff::mirror litehtml)
-    if(NOT SKIFF_SKIA)
-      target_link_libraries(skiff_framework_page PUBLIC Freetype::Freetype)
-    endif()
-    message(STATUS "skiff-framework: the page, through litehtml")
-  endif()
+  target_sources(skiff_framework_page PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/page/page.cc
+                                                                        ${CMAKE_CURRENT_SOURCE_DIR}/src/page/hooks.cc)
+  target_link_libraries(skiff_framework_page PUBLIC skiff_framework_window skiff::mirror)
+  message(STATUS "skiff-framework: the page, through Blitz")
 endif()
 
 # skiff_app(target [SHELL page.html]): a program of skiff.app. Under
