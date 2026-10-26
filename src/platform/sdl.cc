@@ -89,6 +89,7 @@ using ::SDL_GetTouchDevices;
 using ::SDL_GetWindowDisplayScale;
 using ::SDL_GetWindowFlags;
 using ::SDL_GetWindowFromEvent;
+using ::SDL_GetWindowSize;
 using ::SDL_GetWindowSizeInPixels;
 using ::SDL_GetWindowSafeArea;
 using ::SDL_GetWindowPixelDensity;
