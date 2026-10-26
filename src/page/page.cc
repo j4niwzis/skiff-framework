@@ -221,11 +221,20 @@ template <class App> int run(App &app, const window::options &how, const events:
     std::string written;
     float scrolled = 0.0f;
     bool running = true, repaint = true;
+    // Mirrored again only where something may have changed it: an event, a
+    // wake from the program's other threads, or -- for what changes on its
+    // own (a timer, an animation's end) -- a while since. Mirrored at every
+    // tick, the whole tree was walked and written out sixty times a second
+    // with nothing changed.
+    bool stirred = true;
+    double mirrored_at = 0.0;
+    constexpr double kMirrorAtLeastMs = 250.0;
     // Measures: of the frame that last built a document, and how many did.
     std::uint64_t built = 0;
     while (running) {
       sdl::SDL_Event event;
-      bool got = sdl::SDL_WaitEventTimeout(&event, 16);
+      bool got = sdl::SDL_WaitEventTimeout(&event, stirred || repaint ? 16 : static_cast<std::int32_t>(kMirrorAtLeastMs));
+      stirred = stirred || got;
       while (got) {
         if (event.type == sdl::SDL_EVENT_QUIT) {
           running = false;
@@ -252,6 +261,10 @@ template <class App> int run(App &app, const window::options &how, const events:
       if (!running)
         break;
       const double began = detail::now_ms();
+      if (!stirred && began - mirrored_at < kMirrorAtLeastMs && !repaint)
+        continue;
+      stirred = false;
+      mirrored_at = began;
       detail::before_frame(app);
       scene.update(began);
       if (!skiff::scene::hostWork().pressed.empty())
@@ -278,10 +291,13 @@ template <class App> int run(App &app, const window::options &how, const events:
       }
       if (!repaint || !document)
         continue;
-      repaint = false;
       const double painting = detail::now_ms();
+      // Painted once there is something to paint into: until then, asked
+      // again at the next frame -- not let go, as the first frame's paint
+      // was where the window's surface was not there yet.
       if (!paint.begin(sdl::SDL_GetWindowPixelDensity(shown)))
         continue;
+      repaint = false;
       paint.clear(0xFFFFFFFFu);
       const litehtml::position clip(0, 0, host.width, host.height);
       document->draw(0, 0, -scrolled, &clip);
