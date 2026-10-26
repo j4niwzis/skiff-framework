@@ -412,7 +412,10 @@ template <class App> int run(App &app, const window::options &how, const events:
       SDL_RenderPresent(renderer);
       repaint = false;
       ++frames;
-      std::println(std::cerr,
+      // Said where a frame was slow -- longer than one at 60 a second -- and
+      // of the first: said of every frame, it buried everything else.
+      if (frames == 1 || window::detail::now_ms() - began > 16.0)
+        std::println(std::cerr,
                    "[page] #{}: skiff laid out in {:.2f} ms; {} nodes mirrored in {:.2f} ms; Blitz resolved in {:.2f} ms, painted in {:.2f} ms; "
                    "shown in {:.2f} ms",
                    frames, laid_skiff - updated, mirror.size(), mirrored - laid_skiff, resolved - mirrored, painted - resolved,
