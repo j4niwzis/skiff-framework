@@ -50,6 +50,27 @@ namespace detail {
     default: return std::nullopt;
   }
 }
+// Keys the program has first, before the engine's field: Enter (sending,
+// or a new line, as the program says), Escape, and shortcuts with Control
+// or the system's key -- but those the engine's field does itself: all of
+// it selected, copied, cut, pasted, undone, done again.
+[[nodiscard]] inline bool for_the_program(SDL_Keycode key, SDL_Keymod mod) {
+  if (key == SDLK_RETURN || key == SDLK_KP_ENTER || key == SDLK_ESCAPE) return true;
+  if ((mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) == 0) return false;
+  switch (key) {
+    case SDLK_A:
+    case SDLK_C:
+    case SDLK_X:
+    case SDLK_V:
+    case SDLK_Z:
+    case SDLK_Y:
+    case SDLK_LEFT:
+    case SDLK_RIGHT:
+    case SDLK_BACKSPACE:
+    case SDLK_DELETE: return false;
+    default: return true;
+  }
+}
 } // namespace detail
 
 // The program, until its window is closed: as window::run, laid out and
@@ -112,6 +133,14 @@ template <class App> int run(App &app, const window::options &how, const events:
         } else if (event.type == SDL_EVENT_TEXT_INPUT) {
           // Typed: into the engine's field with the focus.
           skiff::web::blitz::commitText(event.text.text);
+          repaint = true;
+        } else if (event.type == SDL_EVENT_KEY_DOWN && detail::for_the_program(event.key.key, event.key.mod) &&
+                   mirror.keyed(scene, skiff::web::blitz::focused(),
+                                skiff::scene::key::down{window::detail::key_of(event.key.key), window::detail::modifiers_of(event.key.mod),
+                                                        event.key.repeat})) {
+          // Taken by the program: Enter sending, Escape closing, a shortcut.
+          detail::after_event(app);
+          stirred = true;
           repaint = true;
         } else if (event.type == SDL_EVENT_KEY_DOWN && detail::editing_key_of(event.key.key)) {
           const SDL_Keymod mod = event.key.mod;
