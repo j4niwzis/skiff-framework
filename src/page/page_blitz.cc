@@ -52,7 +52,9 @@ template <class App> int run(App &app, const window::options &how, const events:
     skiff::scene::hostWork().laidOutElsewhere = true;
     skiff::web::dom::reset();
     skiff::web::blitz::addCss(detail::kPageCss);
-    skiff::mirror::Mirror mirror;
+    // Blitz has SVG, transforms and opacity, and flex boxes as deep as a
+    // tree is: the mirror writes them as they are.
+    skiff::mirror::Mirror mirror(skiff::mirror::kFull);
     // The pixels Blitz paints, and the texture they are shown through, at
     // the window's size in pixels.
     std::vector<std::uint8_t> pixels;
