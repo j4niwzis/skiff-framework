@@ -91,9 +91,9 @@ public:
 
 private:
   [[nodiscard]] static skia::SkRRect rounded(const box &at, const radii &r) {
-    const std::array<skia::SkVector, 4> corners{skia::SkVector{r.top_left_x, r.top_left_y}, skia::SkVector{r.top_right_x, r.top_right_y},
-                                                skia::SkVector{r.bottom_right_x, r.bottom_right_y},
-                                                skia::SkVector{r.bottom_left_x, r.bottom_left_y}};
+    const std::array<skia::SkPoint, 4> corners{skia::SkPoint{r.top_left_x, r.top_left_y}, skia::SkPoint{r.top_right_x, r.top_right_y},
+                                                skia::SkPoint{r.bottom_right_x, r.bottom_right_y},
+                                                skia::SkPoint{r.bottom_left_x, r.bottom_left_y}};
     skia::SkRRect out;
     out.setRectRadii(skia::SkRect::MakeXYWH(at.x, at.y, at.width, at.height), corners.data());
     return out;
