@@ -101,6 +101,9 @@ template <class App> int run(App &app, const window::options &how, const events:
         continue;
       stirred = false;
       mirrored_at = began;
+      // The engine's scrolling, into skiff's views that scroll: what the
+      // program makes of where they are goes by it.
+      mirror.readScrolled(scene.root(), [](skiff::web::dom::Handle element) { return skiff::web::blitz::scrolled(element); });
       detail::before_frame(app);
       scene.update(began);
       if (!skiff::scene::hostWork().pressed.empty())
