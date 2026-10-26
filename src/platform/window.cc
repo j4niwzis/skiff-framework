@@ -428,6 +428,9 @@ int run(App& app, const options& how, const events::kinds& kinds) {
     constexpr float kKeyboardGone = 80.0f;
     constexpr float kHoldSlop = 8.0f;
     float last_width = 0.0f, last_height = 0.0f;
+    // The window's height while nothing is typed by touch: the keyboard's
+    // part of it told to the program (hostWork().keyboardTaken).
+    float untyped_height = 0.0f;
     // Fingers on the screen, where they are in the scene's points: two of
     // them drawn apart or together zoom -- a pinch, given to what is under
     // its middle as the wheel's zoom (the picture viewer's), a step of it
@@ -736,6 +739,13 @@ int run(App& app, const options& how, const events::kinds& kinds) {
         scene.clearFocus();
         redraw = true;
       }
+      // How much of the height the keyboard took: the window as tall as it
+      // was while nothing was typed by touch, less as tall as it is now --
+      // the width the same, else the window turned (or was resized) and
+      // that is its height now.
+      if (!(typing && by_touch) || width != last_width)
+        untyped_height = height;
+      skiff::scene::hostWork().keyboardTaken = std::max(0.0f, untyped_height - height);
       last_width = width;
       last_height = height;
       // What the scene left for the host: the text input started or stopped
