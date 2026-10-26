@@ -442,7 +442,17 @@ int run(App& app, const options& how, const events::kinds& kinds) {
     std::optional<skia::SkRect> typing_told;
     // Whether the window can be seen: off screen, no frames are made.
     bool on_screen = true;
+    // Frames still drawn after the window took another size, whatever
+    // changed in them: a phone's surface takes its new size only as a frame
+    // is shown (EGL), and the frame drawn at the resize went to the old one.
+    // Drawn once, the window kept the old layout, stretched, until a tap
+    // asked for another frame (a tester in split screen).
+    int frames_after_resize = 0;
     while (running) {
+      if (frames_after_resize > 0) {
+        --frames_after_resize;
+        redraw = true;
+      }
       sdl::SDL_Event event;
       const double hold_in = held && !held->fired ? held->since + kHoldMs - detail::now_ms()
                                                   : std::numeric_limits<double>::infinity();
@@ -534,9 +544,11 @@ int run(App& app, const options& how, const events::kinds& kinds) {
             break;
           case sdl::SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
           case sdl::SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+          case sdl::SDL_EVENT_WINDOW_RESIZED:
           case sdl::SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
             scene.state().invalidateLayout();
             redraw = true;
+            frames_after_resize = 3;
             break;
           case sdl::SDL_EVENT_MOUSE_MOTION:
             motion = skiff::scene::pointer::move{event.motion.x * to_scene, event.motion.y * to_scene};
