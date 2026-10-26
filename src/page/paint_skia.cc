@@ -84,6 +84,9 @@ public:
     canvas_->clipRRect(rounded(at, r), true);
   }
   void pop_clip() { canvas_->restore(); }
+  // The canvas, for what skiff paints itself (the nodes the mirror says
+  // are drawn), over what litehtml painted.
+  template <class F> void with_canvas(F &&f) { f(canvas_); }
   void present() {
     canvas_->restore();
     target_.present();

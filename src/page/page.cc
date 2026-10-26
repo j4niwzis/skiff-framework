@@ -20,6 +20,7 @@ export module skiff.platform.page;
 import std;
 import sdl;
 import splice;
+import skia;
 import skiff.scene;
 import skiff.web;
 import skiff.mirror;
@@ -235,6 +236,23 @@ template <class App> int run(App &app, const window::options &how, const events:
     // inline and in its sheet -- written to a file in the working directory,
     // its name said on stderr.
     std::uint64_t dumped = 0;
+    // Where litehtml put each element skiff paints itself (look::drawn), by
+    // its handle: read after each layout.
+    std::unordered_map<skiff::web::dom::Handle, skia::SkRect> drawn_at;
+    const auto drawn_in = [&](this const auto &self, const litehtml::element::ptr &el) -> void {
+      if (el->get_attr("data-skiff-draw") != nullptr)
+        if (const char *said = el->get_attr("data-skiff-h")) {
+          skiff::web::dom::Handle h = 0;
+          const std::string_view text(said);
+          if (std::from_chars(text.data(), text.data() + text.size(), h).ec == std::errc{}) {
+            const litehtml::position at = el->get_placement();
+            drawn_at.insert_or_assign(h, skia::SkRect::MakeXYWH(at.x, at.y, at.width, at.height));
+          }
+          return;
+        }
+      for (const auto &child : el->children())
+        self(child);
+    };
     while (running) {
       sdl::SDL_Event event;
       bool got = sdl::SDL_WaitEventTimeout(&event, stirred || repaint ? 16 : static_cast<std::int32_t>(kMirrorAtLeastMs));
@@ -282,13 +300,18 @@ template <class App> int run(App &app, const window::options &how, const events:
       scene.update(began);
       if (!skiff::scene::hostWork().pressed.empty())
         detail::after_event(app);
+      // skiff's own layout too: what is made by where things are -- a
+      // list's rows, as many as its view holds -- is made by it. litehtml
+      // still lays out what is shown.
+      int w = 0, h = 0;
+      sdl::SDL_GetWindowSize(shown, &w, &h);
+      const double updated = detail::now_ms();
+      scene.layoutIfNeeded(skia::SkRect::MakeWH(static_cast<float>(w), static_cast<float>(h)));
       const double ticked = detail::now_ms();
       mirror.sync(scene.root());
       const std::string html = "<html><head><style>" + std::string(detail::kPageCss) + "</style></head>" +
                                skiff::web::dom::dump(skiff::web::dom::root()) + "</html>";
       const double mirrored = detail::now_ms();
-      int w = 0, h = 0;
-      sdl::SDL_GetWindowSize(shown, &w, &h);
       host.width = static_cast<float>(w);
       host.height = static_cast<float>(h);
       if (html != written) {
@@ -297,9 +320,13 @@ template <class App> int run(App &app, const window::options &how, const events:
         const double made = detail::now_ms();
         (void)document->render(host.width);
         const double laid = detail::now_ms();
+        drawn_at.clear();
+        drawn_in(document->root());
         ++built;
-        std::println(std::cerr, "[page] #{}: {} nodes mirrored in {:.2f} ms, {} bytes of HTML; litehtml made it in {:.2f} ms, laid it out in {:.2f} ms",
-                     built, mirror.size(), mirrored - ticked, html.size(), made - mirrored, laid - made);
+        std::println(std::cerr,
+                     "[page] #{}: skiff laid out in {:.2f} ms; {} nodes mirrored in {:.2f} ms, {} bytes of HTML; litehtml made it in {:.2f} ms, "
+                     "laid it out in {:.2f} ms; {} nodes painted by skiff",
+                     built, ticked - updated, mirror.size(), mirrored - ticked, html.size(), made - mirrored, laid - made, drawn_at.size());
         repaint = true;
       }
       if (!repaint || !document)
@@ -314,8 +341,19 @@ template <class App> int run(App &app, const window::options &how, const events:
       paint.clear(0xFFFFFFFFu);
       const litehtml::position clip(0, 0, host.width, host.height);
       document->draw(0, 0, -scrolled, &clip);
+      const double engine_painted = detail::now_ms();
+      // Over it, what skiff paints itself, where litehtml put it.
+      std::size_t by_skiff = 0;
+      paint.with_canvas([&](skia::SkCanvas *canvas) {
+        const int saved = canvas->save();
+        canvas->translate(0.0f, -scrolled);
+        by_skiff = mirror.paintDrawn(scene.root(), app.painting(), canvas, drawn_at);
+        canvas->restoreToCount(saved);
+      });
       paint.present();
-      std::println(std::cerr, "[page] painted in {:.2f} ms", detail::now_ms() - painting);
+      const double done = detail::now_ms();
+      std::println(std::cerr, "[page] painted: litehtml {:.2f} ms, skiff {:.2f} ms ({} nodes)", engine_painted - painting, done - engine_painted,
+                   by_skiff);
     }
     detail::closing(app);
   }

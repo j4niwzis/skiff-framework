@@ -189,6 +189,8 @@ public:
     if (!clips_.empty()) clips_.pop_back();
     SDL_SetRenderClipRect(renderer_, clips_.empty() ? nullptr : &clips_.back());
   }
+  // No canvas of Skia's here: what skiff paints itself is not painted.
+  template <class F> void with_canvas(F &&) {}
   void present() { SDL_RenderPresent(renderer_); }
 
 private:
