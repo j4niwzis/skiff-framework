@@ -343,6 +343,15 @@ if(SKIFF_FRAMEWORK_PAGE AND TARGET skiff_framework_window)
   FetchContent_Declare(litehtml GIT_REPOSITORY https://github.com/litehtml/litehtml.git
                        GIT_TAG 6fd7aaa63833c913cf1a0336e46fb2e027e4c656)
   FetchContent_MakeAvailable(litehtml)
+  # litehtml is C++17 and imports nothing: where a program builds with
+  # `import std` everywhere (CMAKE_CXX_MODULE_STD), its targets are left out
+  # of it, and out of the scan for modules -- else CMake asks of them a
+  # standard library module of C++17, which there is not.
+  foreach(target IN ITEMS litehtml gumbo)
+    if(TARGET ${target})
+      set_target_properties(${target} PROPERTIES CXX_MODULE_STD OFF CXX_SCAN_FOR_MODULES OFF)
+    endif()
+  endforeach()
   add_library(skiff_framework_page STATIC)
   add_library(skiff::page ALIAS skiff_framework_page)
   target_sources(skiff_framework_page PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/page/page.cc)
