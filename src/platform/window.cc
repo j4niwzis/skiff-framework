@@ -440,7 +440,7 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       return std::hypot(second->second.fX - first->second.fX, second->second.fY - first->second.fY);
     };
     // Where the field typed into was last told to the system.
-    std::optional<skia::SkRect> typing_told;
+    std::optional<skiff::scene::Rect> typing_told;
     // Whether the window can be seen: off screen, no frames are made.
     bool on_screen = true;
     // Frames still drawn after the window took another size, whatever
