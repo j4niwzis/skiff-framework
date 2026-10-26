@@ -231,6 +231,10 @@ template <class App> int run(App &app, const window::options &how, const events:
     constexpr double kMirrorAtLeastMs = 250.0;
     // Measures: of the frame that last built a document, and how many did.
     std::uint64_t built = 0;
+    // Ctrl+D: the page as litehtml was last given it -- its HTML and its CSS,
+    // inline and in its sheet -- written to a file in the working directory,
+    // its name said on stderr.
+    std::uint64_t dumped = 0;
     while (running) {
       sdl::SDL_Event event;
       bool got = sdl::SDL_WaitEventTimeout(&event, stirred || repaint ? 16 : static_cast<std::int32_t>(kMirrorAtLeastMs));
@@ -249,6 +253,11 @@ template <class App> int run(App &app, const window::options &how, const events:
             detail::after_event(app);
             repaint = true;
           }
+        } else if (event.type == sdl::SDL_EVENT_KEY_DOWN && event.key.key == sdl::kKeyD && (event.key.mod & sdl::kKmodCtrl) != 0) {
+          const std::filesystem::path to = std::format("page-{}.html", ++dumped);
+          std::ofstream out(to, std::ios::binary);
+          out << written;
+          std::println(std::cerr, "[page] {} written: {} bytes", std::filesystem::absolute(to).string(), written.size());
         } else if (event.type == sdl::SDL_EVENT_MOUSE_WHEEL) {
           scrolled = std::max(0.0f, scrolled - event.wheel.y * 48.0f);
           repaint = true;
