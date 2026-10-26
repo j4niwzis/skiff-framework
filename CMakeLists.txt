@@ -331,6 +331,27 @@ if(skiff_framework_has_window)
   message(STATUS "skiff-framework: the window, for ${skiff_framework_platform}")
 endif()
 
+# skiff.platform.page: the program's scene laid out and painted by an HTML
+# engine embedded and called directly -- litehtml: no JavaScript, no
+# browser -- through skiff.mirror, painted with Skia here. What it is for is
+# measuring the engine against skiff's own layout and painting.
+option(SKIFF_FRAMEWORK_PAGE "Build skiff.platform.page (litehtml)" OFF)
+if(SKIFF_FRAMEWORK_PAGE AND TARGET skiff_framework_window)
+  include(FetchContent)
+  set(LITEHTML_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+  set(LITEHTML_ENABLE_LINT OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(litehtml GIT_REPOSITORY https://github.com/litehtml/litehtml.git
+                       GIT_TAG 6fd7aaa63833c913cf1a0336e46fb2e027e4c656)
+  FetchContent_MakeAvailable(litehtml)
+  add_library(skiff_framework_page STATIC)
+  add_library(skiff::page ALIAS skiff_framework_page)
+  target_sources(skiff_framework_page PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/page/page.cc)
+  set_target_properties(skiff_framework_page PROPERTIES EXPORT_NAME page CXX_STANDARD 26)
+  target_compile_features(skiff_framework_page PUBLIC cxx_std_26)
+  target_link_libraries(skiff_framework_page PUBLIC skiff_framework_window skiff::mirror litehtml)
+  message(STATUS "skiff-framework: the page, through litehtml")
+endif()
+
 # skiff_app(target [SHELL page.html]): a program of skiff.app. Under
 # Emscripten it is the page itself (index.html, .js, .wasm): what the page's
 # JavaScript calls exported, the page Emscripten makes from SHELL -- which
