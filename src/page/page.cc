@@ -252,6 +252,10 @@ template <class App> int run(App &app, const window::options &how, const events:
         } else if (event.type == sdl::SDL_EVENT_MOUSE_WHEEL) {
           scrolled = std::max(0.0f, scrolled - event.wheel.y * 48.0f);
           repaint = true;
+        } else if (event.type == sdl::SDL_EVENT_WINDOW_EXPOSED || event.type == sdl::SDL_EVENT_WINDOW_SHOWN ||
+                   event.type == sdl::SDL_EVENT_WINDOW_RESTORED) {
+          // Shown again, or what was over it gone: painted again, as it was.
+          repaint = true;
         } else if (event.type == sdl::SDL_EVENT_WINDOW_RESIZED) {
           written.clear();  // laid out again at the new width
           repaint = true;
