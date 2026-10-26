@@ -100,6 +100,20 @@ template <class App> int run(App &app, const window::options &how, const events:
     skiff::mirror::Mirror mirror;
     // Text typed comes as text (SDL_EVENT_TEXT_INPUT), an input method's too.
     SDL_StartTextInput(shown);
+    // The program's own input, as the window gives it -- presses, drags,
+    // right presses, the wheel where the engine scrolled nothing -- at the
+    // point skiff has for where the pointer is in the element the engine
+    // has there; while a press is held, at the same distance from it.
+    skiff::scene::InputRouter router;
+    const std::array layers{skiff::scene::InputRouter::Layer{scene.handle(), false}};
+    router.setLayers(layers);
+    std::optional<skia::SkPoint> held;  // scene's point less the window's, from the press
+    const auto inScene = [&](float x, float y) -> std::optional<skia::SkPoint> {
+      if (held) return skia::SkPoint::Make(x + held->fX, y + held->fY);
+      const skiff::web::dom::Handle element = skiff::web::blitz::at(x, y);
+      const auto box = element == skiff::web::dom::kNone ? std::nullopt : skiff::web::blitz::boxOf(element);
+      return box ? mirror.toScene(element, x - box->x, y - box->y) : std::nullopt;
+    };
     // The pixels Blitz paints, and the texture they are shown through, at
     // the window's size in pixels.
     std::vector<std::uint8_t> pixels;
@@ -119,16 +133,31 @@ template <class App> int run(App &app, const window::options &how, const events:
         } else if (event.type == kinds.wake) {
           detail::woken(app);
         } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-          // The engine's own: a field focused, its caret put.
+          // The engine's own: a field focused, its caret put. And the
+          // program's: a press, a right press -- its menu -- a drag begun.
           skiff::web::blitz::point(skiff::web::blitz::pointer::pressed, event.button.x, event.button.y, event.button.button - 1);
+          if (const auto at = inScene(event.button.x, event.button.y)) {
+            held = skia::SkPoint::Make(at->fX - event.button.x, at->fY - event.button.y);
+            router.pointer(skiff::scene::pointer::down{at->fX, at->fY, event.button.button});
+            detail::after_event(app);
+          }
+          stirred = true;
           repaint = true;
         } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
           skiff::web::blitz::point(skiff::web::blitz::pointer::moved, event.motion.x, event.motion.y, 0);
-          repaint = repaint || event.motion.state != 0;
+          if (const auto at = inScene(event.motion.x, event.motion.y)) router.pointer(skiff::scene::pointer::move{at->fX, at->fY});
+          if (event.motion.state != 0) {
+            detail::after_event(app);
+            stirred = true;
+            repaint = true;
+          }
         } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
           skiff::web::blitz::point(skiff::web::blitz::pointer::released, event.button.x, event.button.y, event.button.button - 1);
-          if (const auto at = skiff::web::blitz::at(event.button.x, event.button.y); at != skiff::web::dom::kNone && mirror.click(scene, at))
-            detail::after_event(app);
+          if (const auto at = inScene(event.button.x, event.button.y))
+            router.pointer(skiff::scene::pointer::up{at->fX, at->fY, event.button.button});
+          held.reset();
+          detail::after_event(app);
+          stirred = true;
           repaint = true;
         } else if (event.type == SDL_EVENT_TEXT_INPUT) {
           // Typed: into the engine's field with the focus.
@@ -151,7 +180,16 @@ template <class App> int run(App &app, const window::options &how, const events:
         } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
           float x = 0.0f, y = 0.0f;
           (void)SDL_GetMouseState(&x, &y);
-          repaint = skiff::web::blitz::scroll(x, y, -event.wheel.x * 48.0, -event.wheel.y * 48.0) || repaint;
+          // The engine's scrolling; where it scrolled nothing, the program's
+          // wheel (a picture zoomed).
+          if (skiff::web::blitz::scroll(x, y, -event.wheel.x * 48.0, -event.wheel.y * 48.0)) {
+            repaint = true;
+          } else if (const auto at = inScene(x, y)) {
+            router.pointer(skiff::scene::pointer::scroll{at->fX, at->fY, event.wheel.x, event.wheel.y});
+            detail::after_event(app);
+            stirred = true;
+            repaint = true;
+          }
         } else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_D && (event.key.mod & SDL_KMOD_CTRL) != 0) {
           // Ctrl+D: the page as Blitz holds it, as HTML -- what the mirror wrote.
           const std::filesystem::path to = std::format("page-{}.html", ++dumped);
