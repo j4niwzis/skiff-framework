@@ -742,8 +742,9 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       // How much of the height the keyboard took: the window as tall as it
       // was while nothing was typed by touch, less as tall as it is now --
       // the width the same, else the window turned (or was resized) and
-      // that is its height now.
-      if (!(typing && by_touch) || width != last_width)
+      // that is its height now. On a phone's build only: a desktop's window
+      // is laid out at the size it has (the user's).
+      if (!skiff::platform::pointing::touch_first() || !(typing && by_touch) || width != last_width)
         untyped_height = height;
       skiff::scene::hostWork().keyboardTaken = std::max(0.0f, untyped_height - height);
       last_width = width;
