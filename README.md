@@ -180,6 +180,25 @@ A program that wants only the window (no `skiff.app`) configures it with
 window unless `SKIFF_FRAMEWORK_WINDOW` is on. On Android the program declares
 the SDL port it builds with -- the NativeActivity fork, with its glue.
 
+## Browser platform services
+
+`skiff::services` exports `skiff.platform.net`, `skiff.platform.storage`,
+and, under Emscripten, `skiff.platform.fibers`. The HTTP transport takes
+owned typed requests and returns outcomes by ticket, with cancellation,
+progress and response size limits. Storage mounts IDBFS before the program
+reads its files and uses automatic persistence; explicit `flush()` waits for
+pending writes. Native file reads and writes use the same storage interface.
+
+`skiff::browser` exports `skiff.platform.browser`: a scene host using the
+browser DOM with the window hook contract. It handles UTF-8 editor selections,
+file dialogs, uploads, downloads and clipboard operations through browser APIs.
+Programs with workers must serve cross-origin isolation headers and configure
+all units with `-fexceptions -pthread`; the final executable needs Asyncify.
+
+`SKIFF_FRAMEWORK_BROWSER_TESTS=ON` adds `skiff_browser_services` (binary HTTP,
+cancellation, IndexedDB reload persistence, and image codecs when skiff is
+present) and `skiff_browser_fibers` (resume, cancellation and stack cleanup).
+
 ## The site
 
 [`site/`](site) is skiff's page, a program of `skiff.app`: `page.cc` is its

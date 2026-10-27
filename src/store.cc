@@ -12,32 +12,12 @@
 //
 // The framework's store feature; served, nothing is kept (a session lives
 // as long as its page).
-module;
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#endif
 export module skiff.app.store;
 
 import std;
 import knot;
 import skiff.model;
-
-#ifdef __EMSCRIPTEN__
-// What the script below uses of Emscripten's library, said: not
-// included unless something says it is needed (callMain failed on it).
-EM_JS_DEPS(skiff_store, "$stringToNewUTF8,$UTF8ToString");
-// clang-format off
-EM_JS(char *, skiffStoreRead, (const char *key), {
-  try {
-    const kept = localStorage.getItem('skiff:' + UTF8ToString(key));
-    return kept === null ? 0 : stringToNewUTF8(kept);
-  } catch (failed) { return 0; }
-});
-EM_JS(void, skiffStoreWrite, (const char *key, const char *text), {
-  try { localStorage.setItem('skiff:' + UTF8ToString(key), UTF8ToString(text)); } catch (failed) {}
-});
-// clang-format on
-#endif
+import skiff.platform.storage;
 
 export namespace skiff::app::store {
 
@@ -81,12 +61,10 @@ private:
   template <class T> void restore_one(Model &model, std::type_identity<T>) {
 #ifdef __EMSCRIPTEN__
     const std::string key(T::key);
-    char *text = skiffStoreRead(key.c_str());
-    if (!text) return;
-    const std::string kept(text);
-    std::free(text);
+    const auto kept = skiff::platform::storage::read(key);
+    if (!kept) return;
     // Read once, here: what comes back as text from the store.
-    auto read = knot::try_read<T>(std::string_view(kept));
+    auto read = knot::try_read<T>(std::string_view(*kept));
     if (!read) return;
     (void)model.apply(skiff::model::over<Kept<T>>([value = std::move(*read)](Kept<T> k) {
       k.value = value;
@@ -102,7 +80,7 @@ private:
     fWritten[at] = seen.fRevision;
 #ifdef __EMSCRIPTEN__
     const std::string key(T::key);
-    skiffStoreWrite(key.c_str(), knot::to_json_string(seen->value).c_str());
+    (void)skiff::platform::storage::write(key, knot::to_json_string(seen->value));
 #endif
   }
 

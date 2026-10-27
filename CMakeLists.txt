@@ -27,8 +27,41 @@ project(skiff_framework VERSION 0.1.0 LANGUAGES CXX)
 if(COMMAND cme_declare_port AND NOT TARGET skiff::skiff)
   cme_declare_port(NAME skiff PROVIDES skiff
     GITHUB_REPOSITORY j4niwzis/skiff
-    GIT_TAG 4394f80df8cc6c56fad59296eab9d39876cd3e18
+    GIT_TAG 4ce179cbcaeac3b093d9f6e1f0c0b89083d1c770
     VERSION 0.1.0 SYSTEM NEVER)
+endif()
+
+# Platform services are usable without the model runner or a native window.
+add_library(skiff_framework_services STATIC)
+add_library(skiff::services ALIAS skiff_framework_services)
+target_sources(skiff_framework_services PUBLIC FILE_SET CXX_MODULES FILES
+  src/services/net.cc src/services/storage.cc)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  target_sources(skiff_framework_services PUBLIC FILE_SET CXX_MODULES FILES src/services/fibers_web.cc)
+  target_link_options(skiff_framework_services INTERFACE -sFETCH -lidbfs.js)
+endif()
+set_target_properties(skiff_framework_services PROPERTIES EXPORT_NAME services CXX_STANDARD 26)
+target_compile_features(skiff_framework_services PUBLIC cxx_std_26)
+
+option(SKIFF_FRAMEWORK_BROWSER_TESTS "Build browser HTTP and persistence checks" OFF)
+if(SKIFF_FRAMEWORK_BROWSER_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  add_executable(skiff_browser_fibers test/fibers_web.cc)
+  target_link_libraries(skiff_browser_fibers PRIVATE skiff::services)
+  target_link_options(skiff_browser_fibers PRIVATE -fexceptions -pthread -sASYNCIFY -sASYNCIFY_STACK_SIZE=1048576
+    -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
+  set_target_properties(skiff_browser_fibers PROPERTIES OUTPUT_NAME fibers SUFFIX .js
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/browser-check" CXX_STANDARD 26)
+  add_executable(skiff_browser_services test/browser_services.cc)
+  target_link_libraries(skiff_browser_services PRIVATE skiff::services)
+  if(TARGET skiff::skiff)
+    target_link_libraries(skiff_browser_services PRIVATE skiff::skiff)
+    target_compile_definitions(skiff_browser_services PRIVATE SKIFF_TEST_IMAGES)
+  endif()
+  target_link_options(skiff_browser_services PRIVATE -fexceptions -pthread -sASYNCIFY -sASYNCIFY_STACK_SIZE=1048576 -sEXIT_RUNTIME=1
+    -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_RUNTIME_METHODS=ccall,UTF8ToString
+    -sEXPORTED_FUNCTIONS=_main,_malloc,_free)
+  set_target_properties(skiff_browser_services PROPERTIES OUTPUT_NAME services SUFFIX .js
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/browser-check" CXX_STANDARD 26)
 endif()
 
 # What is built: skiff.app (the page, or the page written out) and the
@@ -77,7 +110,7 @@ if(PROJECT_IS_TOP_LEVEL)
 endif()
 option(SKIFF_FRAMEWORK_WINDOW "skiff.platform.window, where this build's platform has one" ${skiff_framework_window_default})
 set(skiff_framework_has_window OFF)
-if(SKIFF_FRAMEWORK_WINDOW AND skiff_framework_platform IN_LIST skiff_framework_window_platforms)
+if(SKIFF_FRAMEWORK_WINDOW AND (skiff_framework_platform IN_LIST skiff_framework_window_platforms OR skiff_framework_platform STREQUAL "wasm"))
   set(skiff_framework_has_window ON)
 endif()
 
@@ -207,7 +240,7 @@ if(SKIFF_FRAMEWORK_APP)
       NAME skiff-widgets
       PROVIDES skiff-widgets skiff_widgets
       GITHUB_REPOSITORY j4niwzis/skiff-widgets
-      GIT_TAG 09c01cb6707526e482d2ad6e5936b022b19fc536
+      GIT_TAG 9dcbcb6fcba5ef3861eeaa85b50663cde9ef2e03
       VERSION 0.1.0
     )
   endif()
@@ -259,6 +292,7 @@ if(SKIFF_FRAMEWORK_APP)
   set_target_properties(skiff_framework PROPERTIES EXPORT_NAME framework CXX_STANDARD 26)
   target_compile_features(skiff_framework PUBLIC cxx_std_26)
   target_link_libraries(skiff_framework PUBLIC skiff::ui)
+  target_link_libraries(skiff_framework PUBLIC skiff_framework_services)
   if(SKIFF_FRAMEWORK_SSR OR SKIFF_FRAMEWORK_NET OR SKIFF_FRAMEWORK_STORE)
     target_link_libraries(skiff_framework PUBLIC knot)
   endif()
@@ -289,13 +323,15 @@ if(skiff_framework_has_window)
   # skiff's scene with Skia, and skiff-widgets: the program's where it has
   # them (mux), else asked for here.
   if(NOT TARGET skiff::widgets)
-    set(SKIFF_SKIA ON CACHE BOOL "" FORCE)
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+      set(SKIFF_SKIA ON CACHE BOOL "" FORCE)
+    endif()
     if(COMMAND cme_declare_port)
       cme_declare_port(
         NAME skiff-widgets
         PROVIDES skiff-widgets skiff_widgets
         GITHUB_REPOSITORY j4niwzis/skiff-widgets
-        GIT_TAG 09c01cb6707526e482d2ad6e5936b022b19fc536
+        GIT_TAG 9dcbcb6fcba5ef3861eeaa85b50663cde9ef2e03
         VERSION 0.1.0
       )
     endif()
@@ -304,7 +340,8 @@ if(skiff_framework_has_window)
   # Source overlays, by platform: for foo.cc, a foo_<platform>.cc replaces it
   # on that platform (one may name several: foo_linux_windows_macos.cc), and
   # only this platform's enter the build -- no source says #if about one.
-  list(JOIN skiff_framework_window_platforms "|" skiff_framework_platform_names)
+  set(skiff_framework_overlay_platforms ${skiff_framework_window_platforms} wasm)
+  list(JOIN skiff_framework_overlay_platforms "|" skiff_framework_platform_names)
   set(skiff_framework_overlay "_(${skiff_framework_platform_names})(_(${skiff_framework_platform_names}))*\\.cc$")
   file(GLOB skiff_framework_platform_all CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/*.cc")
   set(skiff_framework_platform_sources)
@@ -330,12 +367,25 @@ if(skiff_framework_has_window)
       list(APPEND skiff_framework_platform_sources "${source}")
     endif()
   endforeach()
+  if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    list(FILTER skiff_framework_platform_sources EXCLUDE REGEX "/window_(input|canvas|toasts)\\.cc$")
+  endif()
   add_library(skiff_framework_window STATIC)
   add_library(skiff::window ALIAS skiff_framework_window)
   target_sources(skiff_framework_window PUBLIC FILE_SET CXX_MODULES FILES ${skiff_framework_platform_sources})
   set_target_properties(skiff_framework_window PROPERTIES EXPORT_NAME window CXX_STANDARD 26)
   target_compile_features(skiff_framework_window PUBLIC cxx_std_26)
-  target_link_libraries(skiff_framework_window PUBLIC SDL3::SDL3 skiff::skiff skiff::widgets splice chevron)
+  target_link_libraries(skiff_framework_window PUBLIC SDL3::SDL3 skiff::skiff skiff::widgets splice chevron skiff_framework_services)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    add_library(skiff_framework_browser STATIC)
+    add_library(skiff::browser ALIAS skiff_framework_browser)
+    target_sources(skiff_framework_browser PUBLIC FILE_SET CXX_MODULES FILES src/browser/browser.cc)
+    target_compile_features(skiff_framework_browser PUBLIC cxx_std_26)
+    set_target_properties(skiff_framework_browser PROPERTIES EXPORT_NAME browser CXX_STANDARD 26)
+    target_link_libraries(skiff_framework_browser PUBLIC skiff_framework_window skiff::mirror skiff_framework_services)
+    target_link_options(skiff_framework_browser INTERFACE -sASYNCIFY -sFORCE_FILESYSTEM=1
+      -sEXPORTED_RUNTIME_METHODS=ccall,UTF8ToString)
+  endif()
   message(STATUS "skiff-framework: the window, for ${skiff_framework_platform}")
 endif()
 

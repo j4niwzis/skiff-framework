@@ -30,79 +30,15 @@ export module skiff.app.net;
 import std;
 import knot;
 import skiff.model;
-
-#ifdef __EMSCRIPTEN__
-// ---- the browser's fetch ------------------------------------------------------
-// Each request by its ticket: begun, and its outcome kept until it is taken
-// -- the status (0: it did not reach the server, or timed out), the body or
-// why it failed, and what Retry-After said.
-// What the script below uses of Emscripten's library, said: not
-// included unless something says it is needed (callMain failed on it).
-EM_JS_DEPS(skiff_net, "$stringToNewUTF8,$UTF8ToString");
-// clang-format off
-EM_JS(void, skiffNetStart, (double ticket, const char *method, const char *url, const char *body, int bodyLength,
-                            const char *type, const char *headers, int timeoutMs), {
-  const net = Module.skiffNet || (Module.skiffNet = {done: {}});
-  const asked = new Headers();
-  const pairs = UTF8ToString(headers).split('\n');
-  for (let i = 0; i + 1 < pairs.length; i += 2) asked.append(pairs[i], pairs[i + 1]);
-  const said = bodyLength > 0 ? UTF8ToString(body, bodyLength) : undefined;
-  if (said !== undefined) asked.set('Content-Type', UTF8ToString(type));
-  const stop = new AbortController();
-  const timer = setTimeout(() => stop.abort(), timeoutMs);
-  fetch(UTF8ToString(url), {method: UTF8ToString(method), headers: asked, body: said, signal: stop.signal})
-    .then(async (answer) => {
-      const text = await answer.text();
-      const after = Number(answer.headers.get('Retry-After'));
-      net.done[ticket] = {status: answer.status, body: text, after: Number.isFinite(after) && after > 0 ? after * 1000 : -1};
-    })
-    .catch((failed) => { net.done[ticket] = {status: 0, body: String((failed && failed.message) || failed), after: -1}; })
-    .finally(() => {
-      clearTimeout(timer);
-      // The program woken for it: no loop waits on it.
-      if (Module._skiff_app_wake) Module._skiff_app_wake();
-    });
-});
-EM_JS(int, skiffNetStatus, (double ticket), {
-  const done = Module.skiffNet && Module.skiffNet.done[ticket];
-  return done ? done.status : -1;
-});
-EM_JS(char *, skiffNetBody, (double ticket), { return stringToNewUTF8(Module.skiffNet.done[ticket].body); });
-EM_JS(int, skiffNetAfter, (double ticket), { return Module.skiffNet.done[ticket].after; });
-EM_JS(void, skiffNetForget, (double ticket), { delete Module.skiffNet.done[ticket]; });
-// clang-format on
-#endif
+import skiff.platform.net;
 
 export namespace skiff::app::net {
 
-// How a request asks: read off it once, where it is written.
-namespace method {
-struct get {};
-struct post {};
-struct put {};
-struct patch {};
-struct remove {};
-} // namespace method
-using method_t = std::variant<method::get, method::post, method::put, method::patch, method::remove>;
-[[nodiscard]] constexpr std::string_view name(method::get) { return "GET"; }
-[[nodiscard]] constexpr std::string_view name(method::post) { return "POST"; }
-[[nodiscard]] constexpr std::string_view name(method::put) { return "PUT"; }
-[[nodiscard]] constexpr std::string_view name(method::patch) { return "PATCH"; }
-[[nodiscard]] constexpr std::string_view name(method::remove) { return "DELETE"; }
-[[nodiscard]] inline std::string_view name(const method_t &m) {
-  return std::visit([](auto one) { return name(one); }, m);
-}
-
-// What is sent: where (http:// or https://), how, what with, and how long
-// it is waited for, each time it is tried.
-struct request {
-  method_t method = method::get{};
-  std::string url;
-  std::string body;
-  std::string type = "application/json";
-  std::vector<std::pair<std::string, std::string>> headers;
-  std::chrono::milliseconds timeout{30000};
-};
+namespace method = skiff::platform::net::method;
+using skiff::platform::net::method_t;
+using skiff::platform::net::name;
+using skiff::platform::net::request;
+using skiff::platform::net::outcome;
 // How often it is tried, and how long between: the first wait, doubled
 // each time, to a most.
 struct retry {
@@ -157,14 +93,6 @@ template <class Ask> [[nodiscard]] auto ask(Ask a) {
     return f;
   };
 }
-
-// What came back of one try: the status (0: the server was not reached, or
-// not in time), the body -- or why it failed -- and what Retry-After said.
-struct outcome {
-  int status = 0;
-  std::string body;
-  std::optional<std::chrono::milliseconds> after;
-};
 
 // An answer read into its type, once: a body kept as text, else read by knot.
 [[nodiscard]] inline std::optional<text> answer_of(std::type_identity<text>, std::string body) { return text{std::move(body)}; }
@@ -295,27 +223,7 @@ private:
 };
 
 #ifdef __EMSCRIPTEN__
-// The browser's fetch, as a runner's transport.
-struct browser {
-  void start(std::uint64_t ticket, const request &r) {
-    const std::string headers = r.headers | std::views::transform([](const auto &one) { return one.first + "\n" + one.second; }) |
-                                std::views::join_with('\n') | std::ranges::to<std::string>();
-    const std::string method(name(r.method));
-    skiffNetStart(static_cast<double>(ticket), method.c_str(), r.url.c_str(), r.body.data(), static_cast<int>(r.body.size()),
-                  r.type.c_str(), headers.c_str(), static_cast<int>(r.timeout.count()));
-  }
-  [[nodiscard]] std::optional<outcome> take(std::uint64_t ticket) {
-    const double at = static_cast<double>(ticket);
-    const int status = skiffNetStatus(at);
-    if (status < 0) return std::nullopt;
-    char *body = skiffNetBody(at);
-    outcome got{.status = status, .body = std::string(body)};
-    std::free(body);
-    if (const int after = skiffNetAfter(at); after >= 0) got.after = std::chrono::milliseconds(after);
-    skiffNetForget(at);
-    return got;
-  }
-};
+using browser = skiff::platform::net::browser;
 #endif
 
 } // namespace skiff::app::net
