@@ -101,8 +101,11 @@ public:
     // boundary is typed request/outcome data, drained by the caller.
     attr.onsuccess = attr.onerror = +[](emscripten_fetch_t *fetch) {
       auto &state = *static_cast<transfer *>(fetch->userData);
+      // Closing an in-progress fetch invokes onerror synchronously. Preserve
+      // the terminal size-limit or cancellation outcome that caused close.
+      if (state.result) return;
       outcome result;
-      result.status = fetch->status;
+      result.status = fetch->status <= 599 ? fetch->status : 0;
       if (fetch->numBytes > state.asked.max_body) {
         result.status = 0; result.body = "Response exceeded the size limit";
       } else if (fetch->data) result.body.assign(fetch->data, static_cast<std::size_t>(fetch->numBytes));
@@ -116,6 +119,7 @@ public:
     };
     attr.onprogress = +[](emscripten_fetch_t *fetch) {
       auto &state = *static_cast<transfer *>(fetch->userData);
+      if (state.result) return;
       state.bytes = {.read = static_cast<std::size_t>(fetch->dataOffset + fetch->numBytes),
                      .total = fetch->totalBytes > 0 ? std::optional<std::size_t>(fetch->totalBytes) : std::nullopt};
       if (state.bytes.read > state.asked.max_body || (state.bytes.total && *state.bytes.total > state.asked.max_body)) {
@@ -143,8 +147,8 @@ public:
     const auto found = flights_.find(ticket);
     if (found == flights_.end()) return;
     auto &state = *found->second;
-    if (auto *fetch = std::exchange(state.fetch, nullptr)) emscripten_fetch_close(fetch);
     state.result = outcome{.status = 0, .body = "Request cancelled", .cancelled = true};
+    if (auto *fetch = std::exchange(state.fetch, nullptr)) emscripten_fetch_close(fetch);
   }
 private:
   struct transfer {

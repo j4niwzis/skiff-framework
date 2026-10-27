@@ -45,6 +45,11 @@ target_compile_features(skiff_framework_services PUBLIC cxx_std_26)
 
 option(SKIFF_FRAMEWORK_BROWSER_TESTS "Build browser HTTP and persistence checks" OFF)
 if(SKIFF_FRAMEWORK_BROWSER_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  add_executable(skiff_browser_net_lifecycle test/browser_net_lifecycle.cc)
+  target_link_libraries(skiff_browser_net_lifecycle PRIVATE skiff::services)
+  target_link_options(skiff_browser_net_lifecycle PRIVATE -fexceptions -pthread -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)
+  set_target_properties(skiff_browser_net_lifecycle PROPERTIES OUTPUT_NAME net-lifecycle SUFFIX .js
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/browser-check" CXX_STANDARD 26)
   add_executable(skiff_browser_fibers test/fibers_web.cc)
   target_link_libraries(skiff_browser_fibers PRIVATE skiff::services)
   target_link_options(skiff_browser_fibers PRIVATE -fexceptions -pthread -sASYNCIFY -sASYNCIFY_STACK_SIZE=1048576

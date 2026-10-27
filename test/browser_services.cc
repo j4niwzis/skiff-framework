@@ -40,7 +40,8 @@ int main() {
     browser.abort(3);
     require(take(3).cancelled, "Cancelled request was not returned as cancelled");
     browser.start(4, {.url = base + "large", .max_body = 16});
-    require(take(4).status == 0, "Oversized response was accepted");
+    const auto large = take(4);
+    require(large.status == 0 && large.body == "Response exceeded the size limit", "Oversized response was accepted");
 #ifdef SKIFF_TEST_IMAGES
     const std::array<std::uint8_t, 8> pixels{255, 0, 0, 255, 0, 255, 0, 255};
     const auto image = skia::imageFromRGBA(2, 1, pixels.data());
