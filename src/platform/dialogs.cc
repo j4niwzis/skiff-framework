@@ -13,93 +13,102 @@ export namespace skiff::platform::dialogs {
 // What they answer -- on a thread of SDL's choosing -- is kept here, and the
 // window told with an event of its own; it takes the answers on its thread.
 class dialogs {
+ private:
+  // A callback may arrive after the window and its dialogs owner are gone.
+  // It only reaches this shared mailbox, never the dialogs object itself.
+  struct mailbox {
+    events::kinds kinds{0, 0, 0};
+    std::mutex lock;
+    std::vector<std::vector<std::string>> files;
+    std::vector<std::string> save_paths, failures;
+
+    void chose(const char* const* list) {
+      auto paths = std::views::iota(std::size_t{0}) | std::views::take_while([list](std::size_t at) { return list[at] != nullptr; }) | std::views::transform([list](std::size_t at) { return std::string(list[at]); }) | std::ranges::to<std::vector>();
+      if (paths.empty()) return;
+      std::uint32_t kind;
+      {
+        const std::lock_guard held(lock);
+        files.push_back(std::move(paths));
+        kind = kinds.files;
+      }
+      events::push(kind);
+    }
+    void failed(const char* why) {
+      std::uint32_t kind;
+      {
+        const std::lock_guard held(lock);
+        failures.emplace_back(why != nullptr && *why != '\0' ? why : "no reason given");
+        kind = kinds.files;
+      }
+      events::push(kind);
+    }
+    void saved(const char* path) {
+      std::uint32_t kind;
+      {
+        const std::lock_guard held(lock);
+        save_paths.emplace_back(path);
+        kind = kinds.save;
+      }
+      events::push(kind);
+    }
+  };
+  struct pending {
+    std::weak_ptr<mailbox> box;
+    // Each outstanding save dialog owns its suggested name independently.
+    std::string offered;
+  };
+
  public:
   dialogs() = default;
   dialogs(const dialogs&) = delete;
   dialogs& operator=(const dialogs&) = delete;
 
-  // The window they are put over, and the kinds of event they answer with.
   void over(sdl::SDL_Window* window, const events::kinds& kinds) {
     parent_ = window;
-    kinds_ = kinds;
+    const std::lock_guard held(box_->lock);
+    box_->kinds = kinds;
   }
-
-  // Files to open, several at once.
   void choose_files() {
+    auto answer = std::make_unique<pending>(pending{box_, {}});
     sdl::SDL_ShowOpenFileDialog(
-        // SDL's C interface gives back what it was given as a void*: this.
         +[](void* self, const char* const* list, int) {
-          // None at all -- not an empty list, which is the dialog let go --
-          // where SDL could not show one: why, told to the user.
-          if (list)
-            static_cast<dialogs*>(self)->chose(list);
-          else
-            static_cast<dialogs*>(self)->failed(sdl::SDL_GetError());
+          const std::unique_ptr<pending> answer(static_cast<pending*>(self));
+          if (auto box = answer->box.lock()) {
+            if (list) box->chose(list);
+            else box->failed(sdl::SDL_GetError());
+          }
         },
-        this, parent_, nullptr, 0, nullptr, true);
+        answer.release(), parent_, nullptr, 0, nullptr, true);
   }
-  // A path to save a file to, the name offered filled in (a path or a
-  // name): kept here until the dialog has read it.
   void choose_save_path(std::string offered) {
-    offered_ = std::move(offered);
+    auto answer = std::make_unique<pending>(pending{box_, std::move(offered)});
+    const char* name = answer->offered.empty() ? nullptr : answer->offered.c_str();
     sdl::SDL_ShowSaveFileDialog(
         +[](void* self, const char* const* list, int) {
-          if (list && *list)
-            static_cast<dialogs*>(self)->saved(*list);
-          else if (!list)
-            static_cast<dialogs*>(self)->failed(sdl::SDL_GetError());
+          const std::unique_ptr<pending> answer(static_cast<pending*>(self));
+          if (auto box = answer->box.lock()) {
+            if (list && *list) box->saved(*list);
+            else if (!list) box->failed(sdl::SDL_GetError());
+          }
         },
-        this, parent_, nullptr, 0, offered_.empty() ? nullptr : offered_.c_str());
+        answer.release(), parent_, nullptr, 0, name);
   }
-
-  // What was chosen since, taken: on the window's thread, at its event.
   [[nodiscard]] std::vector<std::vector<std::string>> take_files() {
-    const std::lock_guard held(lock_);
-    return std::exchange(files_, {});
+    const std::lock_guard held(box_->lock);
+    return std::exchange(box_->files, {});
   }
   [[nodiscard]] std::vector<std::string> take_save_paths() {
-    const std::lock_guard held(lock_);
-    return std::exchange(save_paths_, {});
+    const std::lock_guard held(box_->lock);
+    return std::exchange(box_->save_paths, {});
   }
-  // Why a dialog could not be shown, since: SDL's words.
   [[nodiscard]] std::vector<std::string> take_failures() {
-    const std::lock_guard held(lock_);
-    return std::exchange(failures_, {});
+    const std::lock_guard held(box_->lock);
+    return std::exchange(box_->failures, {});
   }
 
  private:
-  void chose(const char* const* list) {
-    auto paths = std::views::iota(std::size_t{0}) | std::views::take_while([list](std::size_t at) { return list[at] != nullptr; }) | std::views::transform([list](std::size_t at) { return std::string(list[at]); }) | std::ranges::to<std::vector>();
-    if (paths.empty())
-      return;
-    {
-      const std::lock_guard held(lock_);
-      files_.push_back(std::move(paths));
-    }
-    events::push(kinds_.files);
-  }
-  void failed(const char* why) {
-    {
-      const std::lock_guard held(lock_);
-      failures_.emplace_back(why != nullptr && *why != '\0' ? why : "no reason given");
-    }
-    events::push(kinds_.files);
-  }
-  void saved(const char* path) {
-    {
-      const std::lock_guard held(lock_);
-      save_paths_.emplace_back(path);
-    }
-    events::push(kinds_.save);
-  }
-
   sdl::SDL_Window* parent_ = nullptr;
-  events::kinds kinds_{0, 0, 0};
-  std::string offered_;
-  std::mutex lock_;
-  std::vector<std::vector<std::string>> files_;
-  std::vector<std::string> save_paths_;
-  std::vector<std::string> failures_;
+  std::shared_ptr<mailbox> box_ = std::make_shared<mailbox>();
 };
 
 }  // namespace skiff::platform::dialogs

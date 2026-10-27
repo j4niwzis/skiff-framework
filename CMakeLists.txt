@@ -456,6 +456,14 @@ function(skiff_app_client target)
 endfunction()
 
 # The framework's own checks, natively: the state a page carries.
+if(PROJECT_IS_TOP_LEVEL AND skiff_framework_has_window AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  enable_testing()
+  add_executable(skiff_framework_dialogs_test test/dialogs_lifecycle.cc)
+  set_target_properties(skiff_framework_dialogs_test PROPERTIES CXX_STANDARD 26 CXX_SCAN_FOR_MODULES ON)
+  target_link_libraries(skiff_framework_dialogs_test PRIVATE skiff::window)
+  add_test(NAME dialogs_lifecycle COMMAND skiff_framework_dialogs_test)
+endif()
+
 if(PROJECT_IS_TOP_LEVEL AND SKIFF_FRAMEWORK_APP AND SKIFF_FRAMEWORK_SSR AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
   enable_testing()
   add_executable(skiff_framework_state_test test/state.cc)
