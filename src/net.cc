@@ -30,7 +30,9 @@ export module skiff.app.net;
 import std;
 import knot;
 import skiff.model;
-import skiff.platform.net;
+// The public method namespace alias needs its tag declarations visible to
+// callers as well as to this module.
+export import skiff.platform.net;
 
 export namespace skiff::app::net {
 

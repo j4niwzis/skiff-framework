@@ -20,6 +20,7 @@ export module skiff.app.net.native;
 
 import std;
 import skiff.app.net;
+import skiff.platform.net;
 
 namespace skiff::app::net::detail {
 

@@ -7,6 +7,10 @@ import knot;
 import skiff.model;
 import skiff.app.net;
 
+// Method tags must be usable through the public app.net API alone.
+static_assert(skiff::app::net::name(skiff::app::net::method::get{}) == "GET");
+static_assert(skiff::app::net::name(skiff::app::net::method::post{}) == "POST");
+
 namespace probe {
 struct Count {
   int n = 0;
