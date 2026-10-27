@@ -93,12 +93,16 @@ EM_JS(void, skiffBrowserInstall, (const char *css), {
       FS.mkdirTree('/uploads');
       for (const file of files) {
         Module.skiffUploadSequence = (Module.skiffUploadSequence || 0)+1;
-        const name = file.name.replace(/[\\/\x00-\x1f]/g,'_') || 'file';
+        // Numeric codes survive EM_JS's C string processing unchanged.
+        const name = Array.from(file.name, part => {
+          const code = part.codePointAt(0);
+          return code < 32 || code === 47 || code === 92 ? '_' : part;
+        }).join("") || 'file';
         const path = '/uploads/drop-'+Module.skiffUploadSequence+'-'+name;
         FS.writeFile(path,new Uint8Array(await file.arrayBuffer()));
         Module.ccall('skiff_browser_file',null,['string','number'],[path,0]);
       }
-      Module.ccall('skiff_browser_file',null,['string','number'],['',1]);
+      Module.ccall('skiff_browser_file',null,['string','number'],["",1]);
     } catch (error) {Module.ccall('skiff_browser_file_error',null,['string'],[String(error.message || error)]);}
   };
   document.addEventListener('dragover',e => {if (e.dataTransfer?.types.includes('Files')) e.preventDefault();});

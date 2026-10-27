@@ -43,8 +43,14 @@ endif()
 set_target_properties(skiff_framework_services PROPERTIES EXPORT_NAME services CXX_STANDARD 26)
 target_compile_features(skiff_framework_services PUBLIC cxx_std_26)
 
-option(SKIFF_FRAMEWORK_BROWSER_TESTS "Build browser HTTP and persistence checks" OFF)
+option(SKIFF_FRAMEWORK_BROWSER_TESTS "Build browser bridge, HTTP and persistence checks" OFF)
 if(SKIFF_FRAMEWORK_BROWSER_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  find_program(skiff_browser_node NAMES node nodejs REQUIRED)
+  add_custom_target(skiff_browser_bridge
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/browser_bridge.py"
+      --compiler "${CMAKE_CXX_COMPILER}" --node "${skiff_browser_node}"
+    VERBATIM)
   add_executable(skiff_browser_net_lifecycle test/browser_net_lifecycle.cc)
   target_link_libraries(skiff_browser_net_lifecycle PRIVATE skiff::services)
   target_link_options(skiff_browser_net_lifecycle PRIVATE -fexceptions -pthread -sEXIT_RUNTIME=1 -sALLOW_MEMORY_GROWTH=1)

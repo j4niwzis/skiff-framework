@@ -81,6 +81,11 @@ jobs:
           fi
           /tmp/emsdk/emsdk activate 6.0.13
 
+      - name: the DOM bridge through EM_JS
+        run: |
+          source /tmp/emsdk/emsdk_env.sh
+          python3 test/browser_bridge.py
+
       # Which build of the compiler this is: apt.llvm.org's clang 23 is a
       # nightly, and a module file is read only by the build that made it.
       - name: the compiler's build
