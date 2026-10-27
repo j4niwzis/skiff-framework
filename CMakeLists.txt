@@ -23,6 +23,14 @@ endif()
 
 project(skiff_framework VERSION 0.1.0 LANGUAGES CXX)
 
+# The scene/page bridge used by this host, before widgets ask for skiff.
+if(COMMAND cme_declare_port AND NOT TARGET skiff::skiff)
+  cme_declare_port(NAME skiff PROVIDES skiff
+    GITHUB_REPOSITORY j4niwzis/skiff
+    GIT_TAG 9d15a3bf3b9d1513f4c66ad275791f77227c44d3
+    VERSION 0.1.0 SYSTEM NEVER)
+endif()
+
 # What is built: skiff.app (the page, or the page written out) and the
 # window (skiff.platform.window, below). A program that only wants the
 # window -- mux -- says SKIFF_FRAMEWORK_APP OFF, and nothing of skiff.app's

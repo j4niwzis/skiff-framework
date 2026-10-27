@@ -38,8 +38,9 @@ export namespace skiff::platform::page {
 namespace detail {
 // A key that edits a field rather than types into it, as the engine takes
 // it: none for the rest (what they type comes as text).
-[[nodiscard]] inline std::optional<skiff::web::blitz::editing_key> editing_key_of(SDL_Keycode key) {
+[[nodiscard]] inline std::optional<skiff::web::blitz::editing_key> editing_key_of(SDL_Keycode key, SDL_Keymod mod) {
   using enum skiff::web::blitz::editing_key;
+  if (key >= SDLK_A && key <= SDLK_Z && (mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) == 0) return std::nullopt;
   switch (key) {
     case SDLK_BACKSPACE: return backspace;
     case SDLK_DELETE: return erase;
@@ -52,6 +53,12 @@ namespace detail {
     case SDLK_HOME: return home;
     case SDLK_END: return end;
     case SDLK_TAB: return tab;
+    case SDLK_A: return select_all;
+    case SDLK_C: return copy;
+    case SDLK_X: return cut;
+    case SDLK_V: return paste;
+    case SDLK_Z: return undo;
+    case SDLK_Y: return redo;
     default: return std::nullopt;
   }
 }
@@ -125,6 +132,13 @@ template <class App> int run(App &app, const window::options &how, const events:
   // skiff's own face, for what the program measures itself.
   skia::SkFont font;
   fonts::load_fonts<typename window::faces_of<App>::type>(how.fonts, font);
+  using Faces = typename window::faces_of<App>::type;
+  if constexpr (fonts::ships_text<Faces>) {
+    skiff::web::blitz::fontData(std::ranges::data(Faces::regular), std::ranges::size(Faces::regular), skiff::web::blitz::font_face::regular);
+    skiff::web::blitz::fontData(std::ranges::data(Faces::semibold), std::ranges::size(Faces::semibold), skiff::web::blitz::font_face::semibold);
+  }
+  if constexpr (fonts::ships_emoji<Faces>)
+    skiff::web::blitz::fontData(std::ranges::data(Faces::emoji), std::ranges::size(Faces::emoji), skiff::web::blitz::font_face::emoji);
   SDL_Window *shown = SDL_CreateWindow(how.title.c_str(), how.width, how.height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
   SDL_Renderer *renderer = shown ? SDL_CreateRenderer(shown, nullptr) : nullptr;
   if (!shown || !renderer) {
@@ -166,7 +180,7 @@ template <class App> int run(App &app, const window::options &how, const events:
     std::optional<skia::SkPoint> held;  // scene's point less the page's, from the press
     const auto inScene = [&](float x, float y) -> std::optional<skia::SkPoint> {
       if (held) return skia::SkPoint::Make(x + held->fX, y + held->fY);
-      const skiff::web::dom::Handle element = skiff::web::blitz::at(x, y);
+      const skiff::web::dom::Handle element = mirror.ownerOf(skiff::web::blitz::at(x, y));
       const auto box = element == skiff::web::dom::kNone ? std::nullopt : skiff::web::blitz::boxOf(element);
       return box ? mirror.toScene(element, x - box->x, y - box->y) : std::nullopt;
     };
@@ -178,6 +192,13 @@ template <class App> int run(App &app, const window::options &how, const events:
     int texture_w = 0, texture_h = 0;
     bool running = true, repaint = true, stirred = true, on_screen = true;
     double mirrored_at = 0.0;
+    const auto read_edits = [&] {
+      for (const auto &[element, value] : skiff::web::blitz::takeEdits())
+        if (mirror.typed(scene, element, value)) {
+          hooks::after_event(app);
+          stirred = true;
+        }
+    };
     constexpr double kMirrorAtLeastMs = 250.0;
     std::uint64_t frames = 0, dumped = 0;
     while (running) {
@@ -255,7 +276,7 @@ template <class App> int run(App &app, const window::options &how, const events:
             const float x = css(event.wheel.mouse_x), y = css(event.wheel.mouse_y);
             // The engine's scrolling; where it scrolled nothing, the
             // program's wheel (a picture zoomed).
-            if (!skiff::web::blitz::scroll(x, y, -event.wheel.x * 48.0, -event.wheel.y * 48.0))
+            if (!skiff::web::blitz::scroll(x, y, event.wheel.x * 48.0, event.wheel.y * 48.0))
               if (const auto at = inScene(x, y)) router.pointer(skiff::scene::pointer::scroll{at->fX, at->fY, event.wheel.x, event.wheel.y});
             repaint = true;
             break;
@@ -266,6 +287,9 @@ template <class App> int run(App &app, const window::options &how, const events:
             repaint = true;
             break;
           case SDL_EVENT_KEY_DOWN: {
+            // Text and Enter can arrive in the same SDL batch. The draft
+            // must reach the program before Enter asks it to send.
+            read_edits();
             const SDL_Keymod mod = event.key.mod;
             // Ctrl+V with a picture on the clipboard: the picture, as if
             // dropped on the window -- not the text a field would paste.
@@ -289,7 +313,7 @@ template <class App> int run(App &app, const window::options &how, const events:
                 mirror.keyed(scene, skiff::web::blitz::focused(),
                              skiff::scene::key::down{window::detail::key_of(event.key.key), window::detail::modifiers_of(mod), event.key.repeat}))
               repaint = true;
-            else if (const auto editing = detail::editing_key_of(event.key.key))
+            else if (const auto editing = detail::editing_key_of(event.key.key, mod))
               skiff::web::blitz::key(*editing, {.shift = (mod & SDL_KMOD_SHIFT) != 0, .control = (mod & SDL_KMOD_CTRL) != 0,
                                                 .alt = (mod & SDL_KMOD_ALT) != 0, .meta = (mod & SDL_KMOD_GUI) != 0});
             repaint = true;
@@ -311,11 +335,7 @@ template <class App> int run(App &app, const window::options &how, const events:
         break;
       // What the engine's fields were edited to: each given to its node as
       // typing's edits are, the program told as of typing.
-      for (const auto &[element, value] : skiff::web::blitz::takeEdits())
-        if (mirror.typed(scene, element, value)) {
-          hooks::after_event(app);
-          stirred = true;
-        }
+      read_edits();
       // What the engine asked of the host: what it copied, put on the
       // clipboard; the clipboard's text, where it pastes; where an input
       // method's window goes; the pointer's shape.
