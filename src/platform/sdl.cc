@@ -17,6 +17,8 @@ extern "C" int SDL_TakeAndroidEditorState(char *out, int size, int *anchor, int 
 
 export module sdl;
 
+import std;
+
 export namespace sdl {
 
 // Functions, types and enumerators.
