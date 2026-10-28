@@ -8,6 +8,12 @@
 module;
 
 #include <SDL3/SDL.h>
+#ifdef SDL_PLATFORM_ANDROID
+// The SDL fork's: the field typed into told to Android's input method, and
+// what it made of it taken (src/core/android/native/input.cpp).
+extern "C" void SDL_SetAndroidEditorState(const char *utf8, int anchor, int caret);
+extern "C" int SDL_TakeAndroidEditorState(char *out, int size, int *anchor, int *caret);
+#endif
 
 export module sdl;
 
@@ -149,6 +155,41 @@ using ::SDL_WindowFlags;
 using ::SDL_free;
 
 // What SDL's headers say with a macro.
+// A field as the input method edits it: its text, its selection in bytes.
+struct editor_state {
+  std::string text;
+  std::size_t anchor = 0, caret = 0;
+};
+// The field typed into, told to the input method where it edits the text
+// itself (Android's); nothing elsewhere.
+inline void set_editor_state(std::string_view text, std::size_t anchor, std::size_t caret) {
+#ifdef SDL_PLATFORM_ANDROID
+  const std::string ended(text);  // the C API's buffer: ended with a NUL
+  SDL_SetAndroidEditorState(ended.c_str(), static_cast<int>(anchor), static_cast<int>(caret));
+#else
+  (void)text, (void)anchor, (void)caret;
+#endif
+}
+// What the input method made of it, whole; none where it made nothing new.
+inline std::optional<editor_state> take_editor_state() {
+#ifdef SDL_PLATFORM_ANDROID
+  // Asked for its length first (negated), then taken -- again where a
+  // longer one came between.
+  int anchor = 0, caret = 0;
+  int said = SDL_TakeAndroidEditorState(nullptr, 0, &anchor, &caret);
+  while (said < 0) {
+    std::string out(static_cast<std::size_t>(-said), '\0');
+    said = SDL_TakeAndroidEditorState(out.data(), static_cast<int>(out.size()), &anchor, &caret);
+    if (said > 0) {
+      out.resize(static_cast<std::size_t>(said - 1));
+      return editor_state{std::move(out), static_cast<std::size_t>(anchor), static_cast<std::size_t>(caret)};
+    }
+  }
+  return std::nullopt;
+#else
+  return std::nullopt;
+#endif
+}
 // The keyboard asked for as the box typed into says: a secret's hides what
 // is typed, and neither suggests nor learns it; lines take Enter as a new
 // one. SDL's properties are macros: named here, where its header is.

@@ -220,6 +220,7 @@ int run(App& app, const options& how, const events::kinds& kinds) {
     };
     bool typing = false;  // the text input, as last started or stopped
     std::size_t typing_kind = 0;  // and for which kind of box (TextKind's index)
+    std::optional<skiff::scene::Editing> editor_told;  // the field, as the input method was last told it
     // The text input started for the kind of box typed into: a password's
     // keyboard hides it, suggests and learns nothing (a tester's: it was the
     // words' keyboard); lines take Enter as a new one.
@@ -616,6 +617,23 @@ int run(App& app, const options& how, const events::kinds& kinds) {
           start_typing();
         else
           sdl::SDL_StopTextInput(window);
+        // Started anew: what the field is, told again.
+        editor_told.reset();
+      }
+      // The field typed into and the input method, kept the same: the
+      // field's own changes told to it, and what it made of the field given
+      // to the field to take as it is. A keyboard told only what was typed at
+      // the end moved its own caret where mux's was not (a tester's).
+      if (typing) {
+        if (const auto& now = work.editing; now && !now->byKeyboard && now != editor_told) {
+          editor_told = now;
+          sdl::set_editor_state(now->text, now->anchor, now->caret);
+        }
+        if (auto made = sdl::take_editor_state()) {
+          work.edited = skiff::scene::Editing{.text = std::move(made->text), .anchor = made->anchor, .caret = made->caret, .byKeyboard = true};
+          editor_told = work.edited;
+          redraw = true;
+        }
       }
       // The field typed into, told to the system where it moved: in the
       // window's coordinates, the scene's points times the interface's scale.
