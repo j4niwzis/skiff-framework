@@ -33,6 +33,9 @@ extern "C" EMSCRIPTEN_KEEPALIVE void skiff_browser_dialog(unsigned id, int actio
   }
 }
 // clang-format off
+// The scripts are C string literals: an escape JavaScript reads (\\x00)
+// written with its backslash doubled, or C makes it the byte -- a NUL that
+// ended the script mid-regex, and the link failed in Emscripten's parser.
 EM_JS(void, skiffBrowserChooseFiles, (unsigned id), {
   const input = document.createElement('input');input.type = 'file';input.multiple = true;input.hidden = true;
   input.oncancel = () => input.remove();
@@ -41,7 +44,7 @@ EM_JS(void, skiffBrowserChooseFiles, (unsigned id), {
       FS.mkdirTree('/uploads');
       for (const file of input.files) {
         Module.skiffUploadSequence = (Module.skiffUploadSequence || 0)+1;
-        const name = file.name.replace(/[\\/\x00-\x1f]/g,'_') || 'file';
+        const name = file.name.replace(/[\\/\\x00-\\x1f]/g,'_') || 'file';
         const path = '/uploads/'+id+'-'+Module.skiffUploadSequence+'-'+name;
         FS.writeFile(path,new Uint8Array(await file.arrayBuffer()));
         Module.ccall('skiff_browser_dialog',null,['number','number','string'],[id,1,path]);
@@ -54,7 +57,7 @@ EM_JS(void, skiffBrowserChooseFiles, (unsigned id), {
 });
 EM_JS(void, skiffBrowserSavePath, (unsigned id, const char *offered), {
   try {
-    const name = UTF8ToString(offered).split(/[\\/]/).pop().replace(/[\x00-\x1f]/g,'_') || 'download';
+    const name = UTF8ToString(offered).split(/[\\/]/).pop().replace(/[\\x00-\\x1f]/g,'_') || 'download';
     FS.mkdirTree('/exports');
     Module.skiffExportSequence = (Module.skiffExportSequence || 0)+1;
     const path = '/exports/'+Module.skiffExportSequence+'-'+name;
