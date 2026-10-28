@@ -122,6 +122,12 @@ EM_JS(void, skiffBrowserInstall, (const char *css), {
     // go through the same key handlers as the desktop app.
     if (editing && e.code !== 'Enter' && e.code !== 'NumpadEnter' && e.code !== 'Escape' &&
         (!command || ['KeyA','KeyC','KeyX','KeyV','KeyZ','KeyY','ArrowLeft','ArrowRight','Backspace','Delete'].includes(e.code))) return;
+    // The browser's own, never taken from it: its developer tools
+    // (Ctrl+Shift+I, J and C; Cmd+Opt on a Mac -- F12 has no code here) and
+    // a reload. Every Ctrl+letter was the program's, and the console could
+    // not be opened from the keyboard on the page.
+    const tools = ['KeyI','KeyJ','KeyC'].includes(e.code);
+    if ((e.ctrlKey && e.shiftKey && tools) || (e.metaKey && e.altKey && tools) || (command && e.code === 'KeyR')) return;
     let code = keys[e.code] || (e.code === 'NumpadEnter' ? 2 : 0);
     if (/^Key[A-Z]$/.test(e.code)) code = 101+e.code.charCodeAt(3)-65;
     if (/^Digit[0-9]$/.test(e.code)) code = 130+e.code.charCodeAt(5)-48;
