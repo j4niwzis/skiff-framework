@@ -219,6 +219,17 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       return press.key == skiff::scene::keys::kV && press.modifiers.template has<skiff::scene::modifier::control>();
     };
     bool typing = false;  // the text input, as last started or stopped
+    std::size_t typing_kind = 0;  // and for which kind of box (TextKind's index)
+    // The text input started for the kind of box typed into: a password's
+    // keyboard hides it, suggests and learns nothing (a tester's: it was the
+    // words' keyboard); lines take Enter as a new one.
+    const auto start_typing = [&] {
+      namespace kind = skiff::scene::text_kind;
+      (void)spl::visit(spl::overloaded{[&](kind::plain) { return sdl::start_text_input(window, false, false); },
+                                       [&](kind::secret) { return sdl::start_text_input(window, true, false); },
+                                       [&](kind::lines) { return sdl::start_text_input(window, false, true); }},
+                       skiff::scene::hostWork().typingKind);
+    };
 
     // Off to the background -- Android pausing the activity -- or ending:
     // what must outlive the process (the draft being written, the reads not
@@ -448,7 +459,7 @@ int run(App& app, const options& how, const events::kinds& kinds) {
             if (by_touch && typing)
               if (const auto& field = skiff::scene::hostWork().typingAt;
                   field && field->contains(event.button.x * to_scene, event.button.y * to_scene))
-                sdl::SDL_StartTextInput(window);
+                start_typing();
             break;
           case sdl::SDL_EVENT_FINGER_DOWN:
             by_touch = true;
@@ -596,10 +607,13 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       // as a field takes the focus or lets it go, what was copied put on
       // the clipboard, the links pressed followed.
       auto& work = skiff::scene::hostWork();
-      if (work.typing != typing) {
+      // Started again where another kind of box took it: a password's
+      // keyboard after the words'.
+      if (work.typing != typing || (typing && work.typingKind.index() != typing_kind)) {
         typing = work.typing;
+        typing_kind = work.typingKind.index();
         if (typing)
-          sdl::SDL_StartTextInput(window);
+          start_typing();
         else
           sdl::SDL_StopTextInput(window);
       }

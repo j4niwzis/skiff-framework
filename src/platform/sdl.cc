@@ -149,6 +149,21 @@ using ::SDL_WindowFlags;
 using ::SDL_free;
 
 // What SDL's headers say with a macro.
+// The keyboard asked for as the box typed into says: a secret's hides what
+// is typed, and neither suggests nor learns it; lines take Enter as a new
+// one. SDL's properties are macros: named here, where its header is.
+inline bool start_text_input(SDL_Window *window, bool secret, bool lines) {
+  const SDL_PropertiesID how = SDL_CreateProperties();
+  SDL_SetNumberProperty(how, SDL_PROP_TEXTINPUT_TYPE_NUMBER, secret ? SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN : SDL_TEXTINPUT_TYPE_TEXT);
+  SDL_SetBooleanProperty(how, SDL_PROP_TEXTINPUT_MULTILINE_BOOLEAN, lines && !secret);
+  if (secret) {
+    SDL_SetBooleanProperty(how, SDL_PROP_TEXTINPUT_AUTOCORRECT_BOOLEAN, false);
+    SDL_SetNumberProperty(how, SDL_PROP_TEXTINPUT_CAPITALIZATION_NUMBER, SDL_CAPITALIZE_NONE);
+  }
+  const bool started = SDL_StartTextInputWithProperties(window, how);
+  SDL_DestroyProperties(how);
+  return started;
+}
 inline constexpr auto kKey0 = SDLK_0;
 inline constexpr auto kKey1 = SDLK_1;
 inline constexpr auto kKey2 = SDLK_2;
