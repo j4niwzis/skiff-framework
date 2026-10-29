@@ -624,15 +624,17 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       // field's own changes told to it, and what it made of the field given
       // to the field to take as it is. A keyboard told only what was typed at
       // the end moved its own caret where mux's was not (a tester's).
+      // What the input method made is taken first; the field's own told
+      // only where it made nothing new -- the field's is older than what
+      // was typed since, and told over it, what was typed went (a user's).
       if (typing) {
-        if (const auto& now = work.editing; now && !now->byKeyboard && now != editor_told) {
-          editor_told = now;
-          sdl::set_editor_state(now->text, now->anchor, now->caret);
-        }
         if (auto made = sdl::take_editor_state()) {
           work.edited = skiff::scene::Editing{.text = std::move(made->text), .anchor = made->anchor, .caret = made->caret, .byKeyboard = true};
           editor_told = work.edited;
           redraw = true;
+        } else if (const auto& now = work.editing; now && !now->byKeyboard && now != editor_told) {
+          editor_told = now;
+          sdl::set_editor_state(now->text, now->anchor, now->caret);
         }
       }
       // The field typed into, told to the system where it moved: in the
