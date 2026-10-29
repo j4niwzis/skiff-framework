@@ -64,18 +64,27 @@ struct progress {
 };
 
 #ifdef __EMSCRIPTEN__
+// Told nothing as a request ends: its outcome is only taken.
+struct untold {
+  static void finished(std::uint64_t) {}
+};
 // Each request owns its binary body, headers and C callback state until
-// taken or cancelled. Callers drain data; no program callbacks are kept.
-class browser {
+// taken or cancelled. Callers drain data; no program callbacks are kept --
+// but `Notify::finished(ticket)` is said as a request ends, a type's static
+// member the program gives: a program that waits can be woken by it rather
+// than look again and again (a page polled every 5 ms while a long poll
+// waited, the user's).
+template <class Notify = untold> class basic_browser {
 public:
-  browser() = default;
-  browser(const browser &) = delete;
-  browser &operator=(const browser &) = delete;
-  browser(browser &&) = default;
-  browser &operator=(browser &&) = default;
+  basic_browser() = default;
+  basic_browser(const basic_browser &) = delete;
+  basic_browser &operator=(const basic_browser &) = delete;
+  basic_browser(basic_browser &&) = default;
+  basic_browser &operator=(basic_browser &&) = default;
   void start(std::uint64_t ticket, const request &asked) {
     auto owned = std::make_unique<transfer>();
     owned->asked = asked;
+    owned->ticket = ticket;
     auto &state = *owned;
     for (const auto &[name, value] : state.asked.headers) {
       if (name.find_first_of("\r\n") != std::string::npos || value.find_first_of("\r\n") != std::string::npos)
@@ -116,6 +125,7 @@ public:
       headers.resize(size);
       read_headers(result, headers);
       state.result = std::move(result);
+      Notify::finished(state.ticket);
     };
     attr.onprogress = +[](emscripten_fetch_t *fetch) {
       auto &state = *static_cast<transfer *>(fetch->userData);
@@ -126,10 +136,14 @@ public:
         state.result = outcome{.status = 0, .body = "Response exceeded the size limit"};
         state.fetch = nullptr;
         emscripten_fetch_close(fetch);
+        Notify::finished(state.ticket);
       }
     };
     state.fetch = emscripten_fetch(&attr, state.asked.url.c_str());
-    if (!state.fetch) state.result = outcome{.status = 0, .body = "Could not start browser request"};
+    if (!state.fetch) {
+      state.result = outcome{.status = 0, .body = "Could not start browser request"};
+      Notify::finished(ticket);
+    }
     flights_.insert_or_assign(ticket, std::move(owned));
   }
   std::optional<outcome> take(std::uint64_t ticket) {
@@ -153,6 +167,7 @@ public:
 private:
   struct transfer {
     request asked;
+    std::uint64_t ticket = 0;
     std::vector<const char *> headers;
     emscripten_fetch_t *fetch = nullptr;
     progress bytes;
@@ -188,5 +203,6 @@ private:
   }
   std::map<std::uint64_t, std::unique_ptr<transfer>> flights_;
 };
+using browser = basic_browser<>;
 #endif
 }
