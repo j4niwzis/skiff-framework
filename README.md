@@ -217,10 +217,20 @@ build/native/site/site public/static.html public/index.html
 The workflow in `.github/workflows/pages.yml` does the same and hands
 `public/` to GitHub Pages.
 
+## Versions
+
+skiff-framework pins the skiff and skiff-widgets it is built and tested
+with (`CMakeLists.txt`). A program may pin newer ones through its own
+cmake-everywhere ports, and the window (`skiff.platform.window`) is built
+against those: [mux](https://github.com/j4niwzis/mux) takes only the window
+from here and builds it on the current skiff, whose screens are written
+entirely as `skiff.compose` builders.
+
 ## Written in the same hand
 
 [skiff](https://github.com/j4niwzis/skiff) (UI),
 [skiff-widgets](https://github.com/j4niwzis/skiff-widgets) (controls),
+[mux](https://github.com/j4niwzis/mux) (a Matrix and XMPP client on all of them),
 [knot](https://github.com/j4niwzis/knot) (JSON),
 [chevron](https://github.com/j4niwzis/chevron) (XML and HTML),
 [alef](https://github.com/j4niwzis/alef) (Unicode).
