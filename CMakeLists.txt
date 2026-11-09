@@ -316,7 +316,13 @@ if(SKIFF_FRAMEWORK_APP)
 endif()
 
 if(skiff_framework_has_window)
-  find_package(SDL3 REQUIRED)
+  # Its windowing systems said, not found: on Linux both X11 and Wayland,
+  # each built from cmake-everywhere's ports where the machine has none.
+  if(skiff_framework_platform STREQUAL "linux")
+    find_package(SDL3 REQUIRED COMPONENTS x11 wayland)
+  else()
+    find_package(SDL3 REQUIRED)
+  endif()
   # chevron: the clipboard writes what it offers as HTML with its escaping
   # (chevron.escape). The program's where it has it (mux), else asked for.
   if(NOT TARGET chevron)
@@ -398,6 +404,17 @@ if(skiff_framework_has_window)
       -sEXPORTED_RUNTIME_METHODS=ccall,UTF8ToString)
   endif()
   message(STATUS "skiff-framework: the window, for ${skiff_framework_platform}")
+endif()
+
+# skiff.app in a window (SKIFF_APP_WINDOW): the program's tree shown by the
+# window, where the build has the window and the scene.
+if(SKIFF_FRAMEWORK_APP AND SKIFF_FRAMEWORK_CANVAS AND skiff_framework_has_window AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+  add_library(skiff_framework_app_window STATIC)
+  add_library(skiff::app_window ALIAS skiff_framework_app_window)
+  target_sources(skiff_framework_app_window PUBLIC FILE_SET CXX_MODULES FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/app_window.cc)
+  set_target_properties(skiff_framework_app_window PROPERTIES EXPORT_NAME app_window CXX_STANDARD 26)
+  target_compile_features(skiff_framework_app_window PUBLIC cxx_std_26)
+  target_link_libraries(skiff_framework_app_window PUBLIC skiff::framework skiff::window)
 endif()
 
 # skiff.platform.page: the program's scene laid out and painted by an HTML
