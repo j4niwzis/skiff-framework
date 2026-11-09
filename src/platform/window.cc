@@ -770,17 +770,21 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       // What the layout put past the edge of its parent, said where it can
       // be seen: once a node, until it fits again.
       // In the view it was laid out in, where that view was named.
-      const auto told = std::exchange(skiff::scene::overflows(), {});
-      for (const auto& one : told)
-        std::println(std::cerr, "[layout] {}{}{} sticks out of {} by {:.1f} across, {:.1f} down", one.view, one.view.empty() ? "" : ": ",
-                     one.node, one.parent, one.x, one.y);
-      // And the named views they are in, as laid out: a row a node, from
-      // the view down (skiff's laidOutTree). Where the walks are erased
-      // only: in a release build the walk would be made for every type of
-      // the window's tree, for a message no one reads there.
-      if constexpr (skiff::scene::kErasedWalks)
-        if (!told.empty())
-          detail::tell_views_laid_out(scene.root(), told);
+      // None of it in a build without skiff's layout reports
+      // (SKIFF_LAYOUT_REPORTS off): nothing told, nothing in the binary.
+      if constexpr (skiff::scene::kLayoutReports) {
+        const auto told = std::exchange(skiff::scene::overflows(), {});
+        for (const auto& one : told)
+          std::println(std::cerr, "[layout] {}{}{} sticks out of {} by {:.1f} across, {:.1f} down", one.view, one.view.empty() ? "" : ": ",
+                       one.node, one.parent, one.x, one.y);
+        // And the named views they are in, as laid out: a row a node, from
+        // the view down (skiff's laidOutTree). Where the walks are erased
+        // only: in a release build the walk would be made for every type of
+        // the window's tree, for a message no one reads there.
+        if constexpr (skiff::scene::kErasedWalks)
+          if (!told.empty())
+            detail::tell_views_laid_out(scene.root(), told);
+      }
       shapes.show(scene.cursor());
       // Scroll views copied rather than repainted, where the frame is kept.
       skiff::scene::blitScrolling() = hooks::frames(app).partial_redraw;
