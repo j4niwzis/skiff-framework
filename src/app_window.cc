@@ -14,7 +14,9 @@
 export module skiff.app.window;
 
 import std;
-import skiff.app;
+// Exported: SKIFF_APP_WINDOW names skiff::app::App where the program
+// imports only this module.
+export import skiff.app;
 import skiff.app.canvas;
 import skiff.scene;
 import skiff.bind;
@@ -28,9 +30,9 @@ export namespace skiff::app::window {
 // the routing begins with the program's model and sink (canvas::Root), and
 // the paint it is drawn with.
 template <class A> struct Program {
-  using SceneTree = skiff::app::canvas::Root<A, skiff::ui::Mounted<skiff::ui::OnScene, typename A::Tree>>;
+  using SceneTree = skiff::app::canvas::SceneTreeOf<A>;
 
-  skiff::scene::Scene<SceneTree> scene{std::in_place, skiff::ui::mount(skiff::ui::onScene, A::view())};
+  skiff::scene::Scene<SceneTree> scene{std::in_place, skiff::app::canvas::sceneTree<A>()};
   skiff::bind::Binding<typename A::Model> binding;
   skiff::scene::detail::PlainPaint paint;
 

@@ -88,9 +88,14 @@ template <class A, class N> struct Root : N {
   explicit Root(N made) : N(std::move(made)) {}
 };
 template <class A, class N> auto startCarry(Root<A, N> &) { return skiff::bind::carryFrom(&A::model(), &A::sink()); }
+// The tree as the scene holds it: mounted on the scene, and built -- what
+// skiff.ui mounts may be a builder (a styled or projected view: compose's
+// own), and a scene's root holding a builder had no node to walk.
+template <class A> auto sceneTree() { return skiff::compose::build(skiff::ui::mount(skiff::ui::onScene, A::view())); }
+template <class A> using SceneTreeOf = Root<A, decltype(sceneTree<A>())>;
 
 template <class A> struct On {
-  using SceneTree = Root<A, skiff::ui::Mounted<skiff::ui::OnScene, typename A::Tree>>;
+  using SceneTree = SceneTreeOf<A>;
   static_assert(std::same_as<skiff::bind::RootOf<SceneTree>, typename A::Model::RootType>,
                 "skiff::app: the tree says other parts on the scene than on the page -- one model is under both");
 
@@ -126,7 +131,7 @@ template <class A> struct On {
     c.font = skia::SkFont(regular);
     skiff::paint::defaultFont() = &c.font;
     skiff::scene::hostWork().pressed.clear();
-    c.scene.emplace(std::in_place, skiff::ui::mount(skiff::ui::onScene, A::view()));
+    c.scene.emplace(std::in_place, sceneTree<A>());
     c.binding.refresh(c.scene->root(), A::model());
   }
   // What was pressed and kept by its path -- where nothing was carried --
