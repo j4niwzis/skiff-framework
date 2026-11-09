@@ -10,6 +10,10 @@
 //   SKIFF_APP_WINDOW(myapp::page, myapp::Hooks)
 #pragma once
 
-#define SKIFF_APP_WINDOW(page, ...)                                                                                      \
+// SKIFF_APP_WINDOW_AS(entry, page, Hooks): the same program under another
+// name than main -- what an Android NativeActivity's entry point runs.
+#define SKIFF_APP_WINDOW_AS(entry, page, ...)                                                                            \
   using skiff_app_window_t = ::skiff::app::App<&page __VA_OPT__(, ) __VA_ARGS__>;                                        \
-  int main(int argc, char **argv) { return ::skiff::app::window::run<skiff_app_window_t>(argc, argv); }
+  int entry(int argc, char **argv) { return ::skiff::app::window::run<skiff_app_window_t>(argc, argv); }
+
+#define SKIFF_APP_WINDOW(page, ...) SKIFF_APP_WINDOW_AS(main, page __VA_OPT__(, ) __VA_ARGS__)
