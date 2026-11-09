@@ -29,7 +29,9 @@ export import :input;
 export import :canvas;
 export import :toasts;
 
-namespace {
+// Module linkage, not internal: the window's run<App> is instantiated in
+// the program's own unit, where a TU-local class could not be named.
+namespace skiff::platform::window::detail {
 // Threads that play a recording back into pixels in bands, one a thread:
 // made once, each waiting at `start` for a frame, playing its band, and
 // meeting the frame's thread at `done`. Stopped where it is destroyed: each
@@ -87,7 +89,7 @@ private:
   std::barrier<> fDone;
   std::vector<std::jthread> fWorkers;
 };
-} // namespace
+} // namespace skiff::platform::window::detail
 
 export namespace skiff::platform::window {
 
@@ -1033,7 +1035,7 @@ int run(App& app, const options& how, const events::kinds& kinds) {
           // frame was four threads made and gone a frame, every frame of a
           // resize.
           if (picture) {
-            static band_team team(team_size);
+            static detail::band_team team(team_size);
             team.play(pixels, *picture);
           }
         } else {
