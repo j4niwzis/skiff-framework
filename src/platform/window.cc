@@ -29,6 +29,66 @@ export import :input;
 export import :canvas;
 export import :toasts;
 
+namespace {
+// Threads that play a recording back into pixels in bands, one a thread:
+// made once, each waiting at `start` for a frame, playing its band, and
+// meeting the frame's thread at `done`. Stopped where it is destroyed: each
+// told to stop, then woken at `start` to see it (and joined, as jthreads).
+class band_team {
+public:
+  explicit band_team(unsigned size) : fSize(size), fStart(size + 1), fDone(size + 1) {
+    fWorkers.reserve(size);
+    for (unsigned band = 0; band < size; ++band)
+      fWorkers.emplace_back([this, band](std::stop_token stop) {
+        for (;;) {
+          fStart.arrive_and_wait();
+          if (stop.stop_requested())
+            return;
+          playBand(band);
+          fDone.arrive_and_wait();
+        }
+      });
+  }
+  band_team(const band_team &) = delete;
+  band_team &operator=(const band_team &) = delete;
+  ~band_team() {
+    for (std::jthread &worker : fWorkers)
+      worker.request_stop();
+    fStart.arrive_and_wait();
+  }
+  // The recording played into the pixels, every band of it, before this
+  // returns.
+  void play(const skia::SkPixmap &pixels, const skia::SkPicture &picture) {
+    fPixels = &pixels;
+    fPicture = &picture;
+    fStart.arrive_and_wait();
+    fDone.arrive_and_wait();
+  }
+
+private:
+  void playBand(unsigned band) const {
+    const int top = fPixels->height() * static_cast<int>(band) / static_cast<int>(fSize);
+    const int bottom = fPixels->height() * static_cast<int>(band + 1) / static_cast<int>(fSize);
+    if (bottom <= top)
+      return;
+    auto rows = skia::WrapPixels(fPixels->info().makeWH(fPixels->width(), bottom - top),
+                                 fPixels->writable_addr(0, top), fPixels->rowBytes());
+    if (!rows)
+      return;
+    skia::SkCanvas *band_canvas = rows->getCanvas();
+    band_canvas->translate(0.0f, static_cast<float>(-top));
+    band_canvas->drawPicture(fPicture);
+  }
+  unsigned fSize;
+  const skia::SkPixmap *fPixels = nullptr;
+  const skia::SkPicture *fPicture = nullptr;
+  // Said before the workers: they are joined first, while these still are.
+  std::barrier<> fStart;
+  std::barrier<> fDone;
+  std::vector<std::jthread> fWorkers;
+};
+} // namespace
+
 export namespace skiff::platform::window {
 
 namespace detail {
@@ -964,24 +1024,14 @@ int run(App& app, const options& how, const events::kinds& kinds) {
             record->restore();
           }
           const auto picture = recorder.finishRecordingAsPicture();
+          // Played back by the band team: started the first frame there was
+          // this much to paint, and kept -- a team started and joined each
+          // frame was four threads made and gone a frame, every frame of a
+          // resize.
           if (picture) {
-            std::vector<std::jthread> team;
-            team.reserve(team_size);
-            for (unsigned band = 0; band < team_size; ++band)
-              team.emplace_back([&pixels, &picture, band, team_size] {
-                const int top = pixels.height() * static_cast<int>(band) / static_cast<int>(team_size);
-                const int bottom = pixels.height() * static_cast<int>(band + 1) / static_cast<int>(team_size);
-                if (bottom <= top)
-                  return;
-                auto rows = skia::WrapPixels(pixels.info().makeWH(pixels.width(), bottom - top),
-                                             pixels.writable_addr(0, top), pixels.rowBytes());
-                if (!rows)
-                  return;
-                skia::SkCanvas* band_canvas = rows->getCanvas();
-                band_canvas->translate(0.0f, static_cast<float>(-top));
-                band_canvas->drawPicture(picture);
-              });
-          }  // the team joined here
+            static band_team team(team_size);
+            team.play(pixels, *picture);
+          }
         } else {
           for (const skia::SkRect& piece : pieces) {
             into->save();
