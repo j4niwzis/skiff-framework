@@ -815,6 +815,17 @@ int run(App& app, const options& how, const events::kinds& kinds) {
                     << ", hover " << counts.hover << ", animating " << counts.animating << ", draw " << seen << " ("
                     << drawn << " drawn), made " << counts.made << "\n";
       }
+      // What was laid out how many times, by type and the view it is in: the
+      // most first.
+      if (traced) {
+        auto laid = std::exchange(skiff::scene::laidOutByKind(), {});
+        std::vector<std::pair<std::size_t, std::string>> most;
+        for (const auto& [where, count] : laid)
+          most.emplace_back(count, std::format("{}{}{}", where.first, where.second.empty() ? "" : " in ", where.second));
+        std::ranges::sort(most, std::ranges::greater{});
+        for (const auto& [count, what] : most | std::views::take(16))
+          std::cerr << "    laid out " << count << " times: " << what << "\n";
+      }
       // And which nodes marked it, by type and where.
       if (traced)
         for (const auto& one : std::exchange(skiff::scene::damagers(), {}))
