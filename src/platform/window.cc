@@ -329,6 +329,18 @@ int run(App& app, const options& how, const events::kinds& kinds) {
     // keeps its pixels: put back before the next frame is drawn.
     std::vector<std::pair<skia::Sp<skia::SkImage>, skia::SkIRect>> overlays;
     bool vsync_on = true;
+    // Drawn in software, nothing waits for the screen as a GL swap with vsync
+    // does: frames came as fast as events did (200 a second, a mouse moved).
+    // Paced there instead -- no frame before the screen's next one is due,
+    // what came meanwhile taken into it.
+    double presented_at = -1.0e9;
+    const auto frame_interval = [&] {
+      double hz = 60.0;
+      if (const sdl::SDL_DisplayMode* mode = sdl::SDL_GetCurrentDisplayMode(sdl::SDL_GetDisplayForWindow(window)); mode && mode->refresh_rate > 1.0f)
+        hz = static_cast<double>(mode->refresh_rate);
+      return 1000.0 / hz;
+    };
+    const auto paced = [&] { return vsync_on && !target.on_gpu(); };
     // A long press, as a phone's (the user's, #13548): the main button held
     // where it went down for half a second is a right press there -- what is
     // under it given way first (a scroll, a selection begun), then its menu,
@@ -382,7 +394,10 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       if constexpr (requires { app.wake_in(); })
         if (on_screen)
           wake_in = std::min(wake_in, app.wake_in());
-      bool got = (redraw || animating)       ? sdl::SDL_WaitEventTimeout(&event, 16)
+      // A frame wanted: waited for until it is due (software, paced), else
+      // as long as a frame of the screen.
+      const double frame_due = paced() ? presented_at + frame_interval() - detail::now_ms() : 16.0;
+      bool got = (redraw || animating)       ? sdl::SDL_WaitEventTimeout(&event, static_cast<std::int32_t>(std::clamp(frame_due, 0.0, 16.0)))
                  : std::isfinite(wake_in) ? sdl::SDL_WaitEventTimeout(&event, static_cast<std::int32_t>(
                                                                     std::clamp(wake_in, 1.0, 60000.0)))
                                           : sdl::SDL_WaitEvent(&event);
@@ -731,6 +746,12 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       if (!on_screen) {
         animating = !shown_toasts.empty();
         wake_at = std::numeric_limits<double>::infinity();
+        continue;
+      }
+      // Not due yet, drawn in software: what the events did is taken into
+      // the frame when it is.
+      if (paced() && detail::now_ms() < presented_at + frame_interval() - 0.5) {
+        animating = true;  // owed: the next wait ends when it is due
         continue;
       }
       const double events_done = detail::now_ms();
@@ -1209,6 +1230,7 @@ int run(App& app, const options& how, const events::kinds& kinds) {
         target.present(changed);
       else
         target.present();
+      presented_at = detail::now_ms();
       phase_ms = {events_done - frame_began, app_done - events_done, ticked - app_done,  laid_out - ticked,
                   damage_found - laid_out,   shown_at - damage_found, detail::now_ms() - shown_at};
       // A slow frame said, where MUX_TRACE_FRAMES is set: by its phases, as the
