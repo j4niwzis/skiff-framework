@@ -820,11 +820,21 @@ int run(App& app, const options& how, const events::kinds& kinds) {
       if (traced) {
         auto laid = std::exchange(skiff::scene::laidOutByKind(), {});
         std::vector<std::pair<std::size_t, std::string>> most;
-        for (const auto& [where, count] : laid)
-          most.emplace_back(count, std::format("{}{}{}", where.first, where.second.empty() ? "" : " in ", where.second));
+        for (const auto& [where, count] : laid) {
+          const auto& [kind, view, by] = where;
+          most.emplace_back(count, std::format("{}{}{}{}{}", kind, view.empty() ? "" : " in ", view, by.empty() ? "" : ", by ", by));
+        }
         std::ranges::sort(most, std::ranges::greater{});
-        for (const auto& [count, what] : most | std::views::take(16))
+        for (const auto& [count, what] : most | std::views::take(30))
           std::cerr << "    laid out " << count << " times: " << what << "\n";
+      }
+      // The flows laid out by hand, not by the compiled passes, by type.
+      if (traced) {
+        std::map<std::string_view, std::size_t> hand;
+        for (const auto kind : std::exchange(skiff::scene::handFlowKinds(), {}))
+          ++hand[kind];
+        for (const auto& [kind, count] : hand)
+          std::cerr << "    laid out by hand " << count << " times: " << kind << "\n";
       }
       // And which nodes marked it, by type and where.
       if (traced)
