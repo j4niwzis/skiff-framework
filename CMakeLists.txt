@@ -27,7 +27,7 @@ project(skiff_framework VERSION 0.1.0 LANGUAGES CXX)
 if(COMMAND cme_declare_port AND NOT TARGET skiff::skiff)
   cme_declare_port(NAME skiff PROVIDES skiff
     GITHUB_REPOSITORY j4niwzis/skiff
-    GIT_TAG ffaf677f3910b084058c49a9923049d3e3184d6b
+    GIT_TAG 9f244795711bf790a7f10d1351b3af58b5b9befa
     VERSION 0.1.0 SYSTEM NEVER)
 endif()
 
@@ -251,7 +251,7 @@ if(SKIFF_FRAMEWORK_APP)
       NAME skiff-widgets
       PROVIDES skiff-widgets skiff_widgets
       GITHUB_REPOSITORY j4niwzis/skiff-widgets
-      GIT_TAG 95092b1a54fc66137a232ebb9255f6c99af70b39
+      GIT_TAG bc443e934efbcceafd52bf933876948d6f725f39
       VERSION 0.1.0
     )
   endif()
@@ -348,7 +348,7 @@ if(skiff_framework_has_window)
         NAME skiff-widgets
         PROVIDES skiff-widgets skiff_widgets
         GITHUB_REPOSITORY j4niwzis/skiff-widgets
-        GIT_TAG 95092b1a54fc66137a232ebb9255f6c99af70b39
+        GIT_TAG bc443e934efbcceafd52bf933876948d6f725f39
         VERSION 0.1.0
       )
     endif()
